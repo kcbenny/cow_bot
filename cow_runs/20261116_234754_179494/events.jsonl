@@ -1,0 +1,9 @@
+{"event": 1, "at": 1794844079.8882256, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794844082.8787525, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [940, 458], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1794844087.3993099, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00003_PLAYER_STOPPED.png"}
+{"event": 4, "at": 1794844093.8824737, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00004_KILL_VERIFIED.png"}
+{"event": 5, "at": 1794844095.0778422, "state": "PICKUP_MENU_REJECTED", "action": "Take Cowhide", "reason": "menu_item_not_found_or_ambiguous", "screenshot": "00005_PICKUP_MENU_REJECTED.png"}
+{"event": 6, "at": 1794844095.9161835, "state": "PICKUP_MENU_REJECTED", "action": "Take Cowhide", "reason": "hover_text_changed", "screenshot": "00006_PICKUP_MENU_REJECTED.png"}
+{"event": 7, "at": 1794844102.6406271, "state": "PICKUP_MENU_REJECTED", "action": "Take Cowhide", "reason": "menu_item_not_found_or_ambiguous", "screenshot": "00007_PICKUP_MENU_REJECTED.png"}
+{"event": 8, "at": 1794844103.4879978, "state": "PICKUP_MENU_REJECTED", "action": "Take Cowhide", "reason": "menu_item_not_found_or_ambiguous", "screenshot": "00008_PICKUP_MENU_REJECTED.png"}
+{"event": 9, "at": 1794844108.6672318, "state": "SAFE_STOP", "reason": "Foreground-window check failed: unexpected foreground title='\u5de5\u4f5c\u5207\u63db'", "screenshot": "00009_SAFE_STOP.png"}

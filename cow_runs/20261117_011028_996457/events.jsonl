@@ -1,0 +1,3 @@
+{"event": 1, "at": 1794849035.7437677, "state": "INVENTORY_REOPENED", "cowhide": 28, "bones": 0, "empty": 0, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1794849035.9629242, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1794849036.275907, "state": "SAFE_STOP", "reason": "Inventory full; no calibrated banking route is loaded", "screenshot": "00003_SAFE_STOP.png"}

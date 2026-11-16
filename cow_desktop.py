@@ -2,6 +2,7 @@ import ctypes
 from ctypes import wintypes
 import json
 import math
+import random
 import threading
 import time
 from collections import deque
@@ -16,6 +17,14 @@ from cow_core import HealthLock, InventoryPanelUnavailable, Mode, PickupCheck, S
 from cow_vision import (
     INVENTORY_TAB_POINT, Vision, crop, load_image, save_image, similar, text_mask,
 )
+
+PLAYER_STOP_TIMEOUT = 30
+PLAYER_MOTION_THRESHOLD = 80
+PLAYER_STABLE_FRAMES = 7
+BUSY_TARGET_BLACKLIST_SECONDS = 20
+BUSY_TARGET_BLACKLIST_RADIUS = 36
+CAPTURE_INTERVAL_SECONDS = 0.05
+MENU_RENDER_TIMEOUT_SECONDS = 1.0
 
 
 def foreground_window_problem(title: str, minimized: bool) -> str | None:
@@ -34,6 +43,7 @@ class Frame:
     number: int
     at: float
     image: np.ndarray
+    started_at: float | None = None
 
 
 class Desktop:
@@ -86,13 +96,14 @@ class Desktop:
     def _capture(self) -> None:
         try:
             while not self.stop.is_set():
+                captured_at = time.monotonic()
                 image = self.snapshot()
                 self.sequence += 1
-                frame = Frame(self.sequence, time.monotonic(), image)
+                frame = Frame(self.sequence, time.monotonic(), image, captured_at)
                 with self.condition:
                     self.frames.append(frame)
                     self.condition.notify_all()
-                self.stop.wait(0.10)
+                self.stop.wait(CAPTURE_INTERVAL_SECONDS)
         except (OSError, SafetyError) as error:
             self.error = error
             with self.condition:
@@ -121,7 +132,8 @@ class Desktop:
                 if self.error is not None:
                     raise SafetyError(f"Capture failed: {self.error}") from self.error
                 for frame in self.frames:
-                    if frame.at > after:
+                    captured_at = frame.started_at if frame.started_at is not None else frame.at
+                    if captured_at > after:
                         return frame
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -135,14 +147,49 @@ class Desktop:
         if self.cursor is not None and tuple(self.mouse.position()) != self.cursor:
             raise SafetyError("External mouse movement detected")
 
-    def move(self, point: tuple[int, int]) -> None:
-        self._input_check()
+    def _validate_mouse_point(self, point: tuple[int, int]) -> None:
         x, y = point
         width, height = self.vision.settings["screen"]
         if not 1 <= x < width - 1 or not 24 <= y < height - 48:
             raise SafetyError("Mouse target is outside the game")
-        self.mouse.moveTo(x, y, duration=0.07)
+
+    def move(self, point: tuple[int, int], *, duration: float = 0.07) -> None:
+        self._input_check()
+        self._validate_mouse_point(point)
+        x, y = point
+        self.mouse.moveTo(x, y, duration=duration)
         self.cursor = tuple(self.mouse.position())
+
+    def move_loot(self, point: tuple[int, int]) -> None:
+        self._validate_mouse_point(point)
+        start = self.cursor or tuple(self.mouse.position())
+        width, height = self.vision.settings["screen"]
+        clamp = lambda x, y: (
+            min(max(round(x), 1), width - 2),
+            min(max(round(y), 24), height - 49),
+        )
+        dx, dy = point[0] - start[0], point[1] - start[1]
+        distance = math.hypot(dx, dy)
+        if distance == 0:
+            self.move(point, duration=random.uniform(0.10, 0.16))
+            return
+
+        overshoot = random.uniform(1.0, 3.0)
+        overshoot_point = clamp(
+            point[0] + dx / distance * overshoot,
+            point[1] + dy / distance * overshoot,
+        )
+        lateral = random.uniform(-2.0, 2.0)
+        control_point = clamp(
+            start[0] + (overshoot_point[0] - start[0]) * 0.58 - dy / distance * lateral,
+            start[1] + (overshoot_point[1] - start[1]) * 0.58 + dx / distance * lateral,
+        )
+        for destination, duration in (
+            (control_point, random.uniform(0.10, 0.16)),
+            (overshoot_point, random.uniform(0.10, 0.18)),
+            (point, random.uniform(0.08, 0.14)),
+        ):
+            self.move(destination, duration=duration)
 
     def guarded_click(
         self, point: tuple[int, int], expected: str, *, idle: bool = False,
@@ -235,36 +282,43 @@ class Desktop:
             return None
         self._input_check()
         self.mouse.click(button="right")
-        frame = self.fresh()
         x, y = point
         left, top = max(520, x - 220), max(100, y - 220)
         right, bottom = min(1640, x + 220), min(860, y + 240)
         rect = (left, top, right - left, bottom - top)
-        region = text_mask(crop(frame.image, rect)).astype(np.uint8) * 255
-        for item in items:
-            template = text_mask(load_image(self.vision.profile / f"menu_{item}.png"))
-            scores = cv2.matchTemplate(
-                region, template.astype(np.uint8) * 255, cv2.TM_SQDIFF_NORMED,
-            )
-            points = np.argwhere(scores <= 0.00001)
-            if len(points) != 1:
-                continue
-            row, col = points[0]
-            row_rect = (int(left + col), int(top + row), template.shape[1], template.shape[0])
-            destination = (row_rect[0] + template.shape[1] // 2, row_rect[1] + 5)
-            self.move(destination)
-            for _ in range(2):
-                if not np.array_equal(text_mask(crop(self.fresh().image, row_rect)), template):
-                    self.last_pick_menu_failure = "menu_row_changed"
+        menu_deadline = time.monotonic() + MENU_RENDER_TIMEOUT_SECONDS
+        while time.monotonic() < menu_deadline:
+            frame = self.fresh()
+            if frame.at > menu_deadline:
+                break
+            region = text_mask(crop(frame.image, rect)).astype(np.uint8) * 255
+            for item in items:
+                template = text_mask(load_image(self.vision.profile / f"menu_{item}.png"))
+                scores = cv2.matchTemplate(
+                    region, template.astype(np.uint8) * 255, cv2.TM_SQDIFF_NORMED,
+                )
+                points = np.argwhere(scores <= 0.00001)
+                if len(points) != 1:
+                    continue
+                row, col = points[0]
+                row_rect = (int(left + col), int(top + row), template.shape[1], template.shape[0])
+                destination = (row_rect[0] + template.shape[1] // 2, row_rect[1] + 5)
+                self.move(destination)
+                for _ in range(2):
+                    if not np.array_equal(text_mask(crop(self.fresh().image, row_rect)), template):
+                        self.last_pick_menu_failure = "menu_row_changed"
+                        return None
+                if expected == "Take Cowhide":
+                    delay = min(0.45, max(0.20, random.gauss(0.325, 0.05)))
+                    time.sleep(delay)
+                self._input_check()
+                final = self.snapshot()
+                if not np.array_equal(text_mask(crop(final, row_rect)), template):
+                    self.last_pick_menu_failure = "menu_final_guard_failed"
                     return None
-            self._input_check()
-            final = self.snapshot()
-            if not np.array_equal(text_mask(crop(final, row_rect)), template):
-                self.last_pick_menu_failure = "menu_final_guard_failed"
-                return None
-            self._input_check()
-            self.mouse.click()
-            return item
+                self._input_check()
+                self.mouse.click()
+                return item
         self.last_pick_menu_failure = "menu_item_not_found_or_ambiguous"
         return None
 
@@ -376,6 +430,7 @@ class Bot:
         self.pickups = 0
         self.center = tuple(self.vision.settings.get("player_anchor", [942, 520]))
         self.last_kill_point: tuple[int, int] | None = None
+        self.blacklisted_targets: list[tuple[tuple[int, int], float]] = []
 
     def read_inventory(self):
         try:
@@ -455,6 +510,18 @@ class Bot:
         for point in self.vision.grid(self.center):
             if time.monotonic() >= search_deadline:
                 return False
+            now = time.monotonic()
+            self.blacklisted_targets = [
+                (target, expires_at)
+                for target, expires_at in self.blacklisted_targets
+                if expires_at > now
+            ]
+            if any(
+                (point[0] - target[0]) ** 2 + (point[1] - target[1]) ** 2
+                <= BUSY_TARGET_BLACKLIST_RADIUS ** 2
+                for target, _ in self.blacklisted_targets
+            ):
+                continue
             self.desktop.move(point)
             if time.monotonic() >= search_deadline:
                 return False
@@ -465,13 +532,71 @@ class Bot:
             targets = {"Attack Cow (level-2)": "Cow", "Attack Cow calf (level-2)": "Cow calf"}
             if action not in targets:
                 continue
+            if self.vision.target_in_combat(frame.image, point) is True:
+                self.blacklisted_targets.append((
+                    point, time.monotonic() + BUSY_TARGET_BLACKLIST_SECONDS,
+                ))
+                self.audit.event(
+                    "TARGET_BLACKLISTED",
+                    frame,
+                    point=list(point),
+                    duration_seconds=BUSY_TARGET_BLACKLIST_SECONDS,
+                    reason="target_in_combat",
+                )
+                continue
+            attack_frame_image = frame.image
+            busy_messages_before = self.vision.busy_message_count(attack_frame_image)
             if not self.desktop.guarded_click(point, action, idle=True):
                 continue
-            lock = HealthLock(time.monotonic(), targets[action])
             self.audit.event("ATTACK_CLICK", frame, action=action, point=point)
+            target = targets[action]
+            stop_deadline = frame.at + PLAYER_STOP_TIMEOUT
+            previous_image = frame.image
+            stable_frames = 0
+            saw_positive = False
+            lock = None
             while True:
                 frame = self.desktop.fresh()
-                outcome = lock.observe(frame.number, frame.at, self.vision.health(frame.image))
+                if (
+                    self.vision.busy_message_count(frame.image) > busy_messages_before
+                    or self.vision.busy_message_added(
+                        attack_frame_image, frame.image, busy_messages_before,
+                    ) is True
+                ):
+                    self.blacklisted_targets.append((
+                        point, time.monotonic() + BUSY_TARGET_BLACKLIST_SECONDS,
+                    ))
+                    self.audit.event(
+                        "TARGET_BLACKLISTED",
+                        frame,
+                        point=list(point),
+                        duration_seconds=BUSY_TARGET_BLACKLIST_SECONDS,
+                        message="Someone else is fighting that",
+                    )
+                    return False
+                hp = self.vision.health(frame.image)
+                if hp is not None and hp.target != target:
+                    raise SafetyError("Combat HUD target changed")
+                if lock is None:
+                    if hp is not None and hp.positive:
+                        saw_positive = True
+                    if frame.at > stop_deadline:
+                        self.audit.event("ATTACK_MISSED", frame, reason="player_stop_timeout")
+                        return False
+                    motion = self.vision.player_motion(previous_image, frame.image)
+                    stable_frames = (
+                        stable_frames + 1
+                        if motion <= PLAYER_MOTION_THRESHOLD else 0
+                    )
+                    previous_image = frame.image
+                    if stable_frames < PLAYER_STABLE_FRAMES:
+                        continue
+                    self.audit.event(
+                        "PLAYER_STOPPED", frame, stable_frames=stable_frames,
+                    )
+                    lock = HealthLock(frame.at, target)
+                    lock.seen_positive = saw_positive
+                outcome = lock.observe(frame.number, frame.at, hp)
                 if outcome == "KILLED":
                     self.kills += 1
                     self.last_kill_point = point
@@ -497,7 +622,10 @@ class Bot:
         ignored_item_matches = 0
         farthest_distance = 0.0
         last_frame = None
+        color_candidate_points: list[tuple[int, int]] = []
+        pending_color_candidates: deque[tuple[tuple[int, int], str]] = deque()
         target_actions = {f"Take {item}" for item in self.mode.items}
+        spiral_actions = target_actions - {"Take Cowhide"}
 
         def finish(reason: str) -> None:
             self.audit.event(
@@ -507,6 +635,8 @@ class Bot:
                 scanned_points=sum(scanned.values()),
                 fine_points=scanned["fine"],
                 coarse_points=scanned["coarse"],
+                color_candidates=len(color_candidate_points),
+                color_candidate_points=[list(point) for point in color_candidate_points],
                 hover_matches=hover_matches,
                 ignored_item_matches=ignored_item_matches,
                 farthest_distance=round(farthest_distance, 1),
@@ -514,14 +644,110 @@ class Bot:
                 stop_reason=reason,
             )
 
-        for point, phase in self.vision.loot_grid(center, radius, fine_radius):
+        def enqueue_color_candidates(image: np.ndarray) -> None:
+            for point, phase in self.vision.loot_candidates(
+                image, center, radius, fine_radius,
+            ):
+                if any(
+                    (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2 <= 225
+                    for previous in color_candidate_points
+                ):
+                    continue
+                color_candidate_points.append(point)
+                pending_color_candidates.append((point, phase))
+
+        last_frame = self.desktop.fresh()
+        if last_frame.at > deadline or time.monotonic() >= deadline:
+            finish("time_budget")
+            return
+        enqueue_color_candidates(last_frame.image)
+        occluded_probes: deque[tuple[tuple[int, int], str]] = deque()
+        if "Cowhide" in self.mode.items:
+            anchor_x, anchor_y = self.vision.settings.get("player_anchor", [942, 520])
+            screen_w, screen_h = self.vision.settings.get("screen", [1920, 1080])
+            raw_probes = [
+                (int(anchor_x), int(anchor_y) - 16),
+                (int(anchor_x), int(anchor_y) - 28),
+                (int(anchor_x) - 14, int(anchor_y) - 20),
+                (int(anchor_x) + 14, int(anchor_y) - 20),
+                (int(anchor_x), int(anchor_y) - 40),
+                (int(anchor_x), int(anchor_y)),
+                center,
+                (center[0], center[1] - 14),
+            ]
+            seen_probes: set[tuple[int, int]] = set()
+            for probe in raw_probes:
+                if (
+                    probe in seen_probes
+                    or not 1 <= probe[0] < screen_w - 1
+                    or not 24 <= probe[1] < screen_h - 48
+                ):
+                    continue
+                seen_probes.add(probe)
+                occluded_probes.append((probe, "fine"))
+        spiral_candidates = None
+        if spiral_actions:
+            spiral_candidates = iter(
+                (point, phase)
+                for point, phase in self.vision.loot_grid(center, radius, fine_radius)
+            )
+        while True:
             if time.monotonic() >= deadline:
                 finish("time_budget")
                 return
             if baseline.full:
                 finish("inventory_full")
                 return
-            self.desktop.move(point)
+            is_color_candidate = bool(pending_color_candidates)
+            is_occluded_probe = False
+            if is_color_candidate:
+                point, phase = pending_color_candidates.popleft()
+            else:
+                frame = self.desktop.fresh()
+                if frame.at > deadline or time.monotonic() >= deadline:
+                    last_frame = frame
+                    finish("time_budget")
+                    return
+                last_frame = frame
+                enqueue_color_candidates(frame.image)
+                elapsed = max(time.monotonic(), frame.at) - started
+                if pending_color_candidates:
+                    point, phase = pending_color_candidates.popleft()
+                    is_color_candidate = True
+                elif occluded_probes and elapsed >= 2.0:
+                    point, phase = occluded_probes.popleft()
+                    while any(
+                        (point[0] - previous[0]) ** 2 + (point[1] - previous[1]) ** 2 <= 64
+                        for previous in color_candidate_points
+                    ):
+                        if not occluded_probes:
+                            point = None
+                            break
+                        point, phase = occluded_probes.popleft()
+                    if point is None:
+                        continue
+                    is_occluded_probe = True
+                elif spiral_candidates is not None:
+                    try:
+                        point, phase = next(spiral_candidates)
+                    except StopIteration:
+                        spiral_candidates = None
+                        if "Cowhide" not in self.mode.items:
+                            finish("region_exhausted")
+                            return
+                        continue
+                elif "Cowhide" not in self.mode.items:
+                    finish("region_exhausted")
+                    return
+                elif not occluded_probes and elapsed >= 10.0:
+                    finish("region_exhausted")
+                    return
+                else:
+                    continue
+            if is_color_candidate or is_occluded_probe:
+                self.desktop.move_loot(point)
+            else:
+                self.desktop.move(point)
             if time.monotonic() >= deadline:
                 finish("time_budget")
                 return
@@ -538,6 +764,9 @@ class Bot:
                 ignored_item_matches += 1
                 continue
             if action not in target_actions:
+                continue
+            if not is_color_candidate and not is_occluded_probe and action not in spiral_actions:
+                ignored_item_matches += 1
                 continue
             hover_matches += 1
             baseline = self.read_inventory()

@@ -60,20 +60,20 @@ class Inventory:
 class HealthLock:
     """Only fresh positive HP followed by two fresh zero frames confirms a kill."""
 
-    def __init__(self, clicked_at: float, target: str) -> None:
-        self.clicked_at = clicked_at
+    def __init__(self, started_at: float, target: str) -> None:
+        self.started_at = started_at
         self.target = target
         self.seen_positive = False
         self.zeros = 0
         self.last_id = -1
-        self.last_time = clicked_at
+        self.last_time = started_at - 1e-9
 
     def observe(self, frame_id: int, captured_at: float, hp: Health | None) -> str:
         if frame_id <= self.last_id or captured_at <= self.last_time:
             return "WAIT"
         self.last_id = frame_id
         self.last_time = captured_at
-        elapsed = captured_at - self.clicked_at
+        elapsed = captured_at - self.started_at
         if elapsed > 30:
             raise SafetyError("Combat timed out; outcome is unknown")
         if not self.seen_positive and elapsed > 10:
@@ -108,8 +108,8 @@ class PickupCheck:
             return False
         self.last_id = frame_id
         self.last_time = captured_at
-        if captured_at - self.clicked_at > 4:
-            raise SafetyError("Pickup not verified within four seconds")
+        if captured_at - self.clicked_at > 15:
+            raise SafetyError("Pickup not verified within fifteen seconds")
         expected = self.baseline.count(self.item) + 1
         unchanged = all(
             current.count(item) == self.baseline.count(item)

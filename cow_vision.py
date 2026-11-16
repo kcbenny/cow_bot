@@ -1,4 +1,6 @@
 import json
+import math
+import random
 from pathlib import Path
 
 import cv2
@@ -14,7 +16,12 @@ WORLD = (520, 110, 1120, 750)
 PANEL = (1676, 722, 200, 6)
 INVENTORY_TAB = (1558, 998, 20, 30)
 INVENTORY_TAB_POINT = (1568, 1013)
+CHAT = (0, 870, 520, 130)
 CENTERS = [(1713 + col * 42, 752 + row * 36) for row in range(7) for col in range(4)]
+COWHIDE_HSV_LOWER = np.asarray([0, 0, 160], dtype=np.uint8)
+COWHIDE_HSV_UPPER = np.asarray([20, 50, 255], dtype=np.uint8)
+COWHIDE_MIN_CONTOUR_AREA = 80
+COWHIDE_MAX_CONTOUR_AREA = 300
 
 
 def load_image(path: Path) -> np.ndarray:
@@ -162,6 +169,8 @@ class Vision:
             for target in ("Cow", "Cow calf")
         }
         self.bank_header = load_image(profile / "bank_header.png")
+        busy_message = load_image(ROOT / "images" / "busy_fighting_chat.png")
+        self.busy_message_template = (busy_message.max(axis=2) < 100).astype(np.uint8) * 255
 
     def check_geometry(self, image: np.ndarray) -> None:
         width, height = self.settings["screen"]
@@ -212,8 +221,90 @@ class Vision:
         return None
 
     def hud_clear(self, image: np.ndarray) -> bool:
-        area = crop(image, (4, 50, 145, 39))
-        return bool(np.mean(area.max(axis=2) < 30) >= 0.98)
+        title = crop(image, (4, 50, 145, 16)).max(axis=2) >= 180
+        if any(np.array_equal(title, mask) for mask in self.huds.values()):
+            return False
+        bar = crop(image, (7, 69, 138, 15))
+        green = (bar[:, :, 1] > 150) & (bar[:, :, 0] < 80) & (bar[:, :, 2] < 80)
+        red = (bar[:, :, 0] > 150) & (bar[:, :, 1] < 80) & (bar[:, :, 2] < 80)
+        return int(np.count_nonzero(green | red)) < 100
+
+    def player_motion(self, previous: np.ndarray, current: np.ndarray) -> int:
+        if previous.shape != current.shape:
+            raise SafetyError("Player-motion frames have different dimensions")
+        width, height = current.shape[1], current.shape[0]
+        anchor_x, anchor_y = self.settings.get("player_anchor", [942, 520])
+        left, top = int(anchor_x) - 32, int(anchor_y) - 40
+        if left < 0 or top < 0 or left + 64 > width or top + 80 > height:
+            raise SafetyError("Player anchor is outside the screenshot; recalibration required")
+        before = cv2.cvtColor(crop(previous, (left, top, 64, 80)), cv2.COLOR_RGB2GRAY)
+        after = cv2.cvtColor(crop(current, (left, top, 64, 80)), cv2.COLOR_RGB2GRAY)
+        return int(np.count_nonzero(cv2.absdiff(before, after) > 40))
+
+    def busy_message_rows(self, image: np.ndarray) -> list[int]:
+        chat = crop(image, CHAT)
+        mask = (chat.max(axis=2) < 100).astype(np.uint8) * 255
+        scores = cv2.matchTemplate(
+            mask, self.busy_message_template, cv2.TM_CCOEFF_NORMED,
+        )
+        matched_rows = [
+            row for row in range(scores.shape[0])
+            if float(scores[row].max()) >= 0.97
+        ]
+        distinct_rows = []
+        for row in matched_rows:
+            if not distinct_rows or row - distinct_rows[-1] > 4:
+                distinct_rows.append(row)
+        return distinct_rows
+
+    def busy_message_count(self, image: np.ndarray) -> int:
+        return len(self.busy_message_rows(image))
+
+    def busy_message_added(
+        self, before: np.ndarray, after: np.ndarray, before_count: int | None = None,
+    ) -> bool:
+        after_rows = self.busy_message_rows(after)
+        previous_count = (
+            self.busy_message_count(before) if before_count is None else before_count
+        )
+        if len(after_rows) > previous_count:
+            return True
+        if not after_rows:
+            return False
+        before_chat = crop(before, CHAT)
+        after_chat = crop(after, CHAT)
+        if np.array_equal(before_chat, after_chat):
+            return False
+        last_row = after_rows[-1]
+        row_height = self.busy_message_template.shape[0]
+        # When chat is full, a new busy line scrolls older lines up while keeping the same visible count.
+        has_lower_text = bool(
+            (after_chat[last_row + row_height + 2:110].max(axis=2) < 100).any()
+        )
+        if has_lower_text:
+            return False
+        return not np.array_equal(
+            before_chat[last_row:last_row + row_height],
+            after_chat[last_row:last_row + row_height],
+        )
+
+    def target_in_combat(self, image: np.ndarray, point: tuple[int, int]) -> bool:
+        x, y = point
+        height, width = image.shape[:2]
+        left, top = max(0, x - 65), max(0, y - 90)
+        right, bottom = min(width, x + 65), min(height, y + 20)
+        if right <= left or bottom <= top:
+            return False
+        roi = image[top:bottom, left:right]
+        green = (roi[:, :, 0] < 30) & (roi[:, :, 1] > 220) & (roi[:, :, 2] < 30)
+        red = (roi[:, :, 0] > 220) & (roi[:, :, 1] < 30) & (roi[:, :, 2] < 30)
+        mask = (green | red).astype(np.uint8) * 255
+        count, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        for index in range(1, count):
+            _, _, bw, bh, area = stats[index]
+            if 26 <= bw <= 34 and 4 <= bh <= 6 and area >= 120:
+                return True
+        return False
 
     def inventory(self, image: np.ndarray) -> Inventory:
         if not self.inventory_panel_visible(image):
@@ -270,27 +361,147 @@ class Vision:
         fine_radius: int = 48,
     ):
         x, y, width, height = self.settings["search"]
-        phases = (
-            ("fine", 12, 0, min(radius, fine_radius)),
-            ("coarse", 24, min(radius, fine_radius), radius),
-        )
-        for name, step, inner_radius, outer_radius in phases:
-            inner_squared = inner_radius ** 2
-            outer_squared = outer_radius ** 2
-            points = [
-                (px, py)
-                for py in range(y + 12, y + height - 12, step)
-                for px in range(x + 12, x + width - 12, step)
-                if (
-                    (distance_squared := (px - center[0]) ** 2 + (py - center[1]) ** 2)
-                    <= outer_squared
-                    and (name == "fine" or distance_squared > inner_squared)
-                )
-            ]
-            yield from (
-                (point, name)
-                for point in sorted(
-                    points,
-                    key=lambda p: (p[0] - center[0]) ** 2 + (p[1] - center[1]) ** 2,
-                )
+        distance = 0.0
+        angle = 0.0
+        visited = set()
+        while distance <= radius:
+            point = (
+                round(center[0] + distance * np.cos(angle)),
+                round(center[1] + distance * np.sin(angle)),
             )
+            if (
+                x + 12 <= point[0] < x + width - 12
+                and y + 12 <= point[1] < y + height - 12
+                and point not in visited
+            ):
+                visited.add(point)
+                yield point, "fine" if distance <= fine_radius else "coarse"
+            spacing = 12 if distance <= fine_radius else 24
+            angle_step = min(1.0, spacing / max(distance, spacing))
+            distance += spacing * angle_step / (2 * np.pi)
+            angle += angle_step
+
+    def loot_candidates(
+        self,
+        image: np.ndarray,
+        center: tuple[int, int],
+        radius: int,
+        fine_radius: int = 48,
+    ) -> list[tuple[tuple[int, int], str]]:
+        self.check_geometry(image)
+        search_x, search_y, search_width, search_height = self.settings["search"]
+        left = max(search_x + 12, center[0] - radius)
+        top = max(search_y + 12, center[1] - radius)
+        right = min(search_x + search_width - 12, center[0] + radius + 1)
+        bottom = min(search_y + search_height - 12, center[1] + radius + 1)
+        if right <= left or bottom <= top:
+            return []
+
+        region = crop(image, (left, top, right - left, bottom - top))
+        hsv = cv2.cvtColor(region, cv2.COLOR_RGB2HSV)
+        mask = cv2.inRange(hsv, COWHIDE_HSV_LOWER, COWHIDE_HSV_UPPER)
+        circle = np.zeros(mask.shape, dtype=np.uint8)
+        cv2.circle(
+            circle,
+            (center[0] - left, center[1] - top),
+            radius,
+            255,
+            thickness=-1,
+        )
+        mask = cv2.bitwise_and(mask, circle)
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE,
+        )
+        red_accent = cv2.bitwise_or(
+            cv2.inRange(
+                hsv,
+                np.asarray([0, 70, 45], dtype=np.uint8),
+                np.asarray([20, 255, 240], dtype=np.uint8),
+            ),
+            cv2.inRange(
+                hsv,
+                np.asarray([170, 70, 45], dtype=np.uint8),
+                np.asarray([179, 255, 240], dtype=np.uint8),
+            ),
+        )
+
+        candidates = []
+        fallback_candidates = []
+        seen = set()
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            x, y, width, height = cv2.boundingRect(contour)
+            aspect_ratio = width / height
+            red_pixels = cv2.countNonZero(red_accent[y:y + height, x:x + width])
+            is_full_cowhide = (
+                COWHIDE_MIN_CONTOUR_AREA < area < COWHIDE_MAX_CONTOUR_AREA
+                and 12 <= width <= 26
+                and 10 <= height <= 22
+                and 0.7 <= aspect_ratio <= 1.8
+                and red_pixels >= 5
+            )
+            moments = cv2.moments(contour)
+            if moments["m00"] == 0:
+                continue
+            centroid_x = moments["m10"] / moments["m00"]
+            centroid_y = moments["m01"] / moments["m00"]
+            distance_squared = (
+                (left + centroid_x - center[0]) ** 2
+                + (top + centroid_y - center[1]) ** 2
+            )
+            # Partially occluded cowhide near the kill point/player can have a smaller contour.
+            is_partial_near_center = (
+                not is_full_cowhide
+                and distance_squared <= fine_radius ** 2
+                and 35 <= area <= COWHIDE_MIN_CONTOUR_AREA
+                and 7 <= width <= 26
+                and 6 <= height <= 22
+                and red_pixels >= 2
+            )
+            if not is_full_cowhide and not is_partial_near_center:
+                continue
+            interior_points = [
+                (candidate_x, candidate_y)
+                for candidate_y in range(
+                    max(y, math.ceil(centroid_y - 5)),
+                    min(y + height - 1, math.floor(centroid_y + 5)) + 1,
+                )
+                for candidate_x in range(
+                    max(x, math.ceil(centroid_x - 5)),
+                    min(x + width - 1, math.floor(centroid_x + 5)) + 1,
+                )
+                if cv2.pointPolygonTest(
+                    contour, (float(candidate_x), float(candidate_y)), False,
+                ) >= 0
+            ]
+            if interior_points:
+                candidate_x, candidate_y = random.choice(interior_points)
+            else:
+                contour_points = contour.reshape(-1, 2)
+                nearest = contour_points[
+                    np.argmin(
+                        (contour_points[:, 0] - centroid_x) ** 2
+                        + (contour_points[:, 1] - centroid_y) ** 2
+                    )
+                ]
+                candidate_x, candidate_y = map(int, nearest)
+            point = (left + candidate_x, top + candidate_y)
+            point_distance_squared = (
+                (point[0] - center[0]) ** 2 + (point[1] - center[1]) ** 2
+            )
+            if point_distance_squared > radius ** 2 or point in seen:
+                continue
+            seen.add(point)
+            distance = np.sqrt(point_distance_squared)
+            entry = (point, "fine" if distance <= fine_radius else "coarse")
+            if is_full_cowhide:
+                candidates.append(entry)
+            else:
+                fallback_candidates.append(entry)
+        sort_key = lambda candidate: (
+            (candidate[0][0] - center[0]) ** 2
+            + (candidate[0][1] - center[1]) ** 2,
+            candidate[0][1],
+            candidate[0][0],
+        )
+        return sorted(candidates, key=sort_key) + sorted(fallback_candidates, key=sort_key)

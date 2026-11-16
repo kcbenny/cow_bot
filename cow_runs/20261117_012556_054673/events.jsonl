@@ -1,0 +1,5 @@
+{"event": 1, "at": 1794849961.8574119, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794849965.232634, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [964, 458], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1794849969.8965235, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00003_PLAYER_STOPPED.png"}
+{"event": 4, "at": 1794849973.965635, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00004_KILL_VERIFIED.png"}
+{"event": 5, "at": 1794849992.5986505, "state": "SAFE_STOP", "reason": "Capture failed: Foreground-window check failed: unexpected foreground title='\u5de5\u4f5c\u5207\u63db'", "screenshot": "00005_SAFE_STOP.png"}

@@ -2,7 +2,9 @@ import contextlib
 import io
 import json
 import tempfile
+import threading
 import unittest
+from collections import deque
 from pathlib import Path
 from unittest.mock import Mock, call, patch
 
@@ -103,6 +105,11 @@ class HealthTests(unittest.TestCase):
             "WAIT",
         )
 
+    def test_lock_can_begin_on_the_first_frame_after_player_stops(self):
+        lock = HealthLock(12, "Cow")
+        self.assertEqual(lock.observe(1, 12, Health("Cow", True)), "WAIT")
+        self.assertTrue(lock.seen_positive)
+
 
 class PickupTests(unittest.TestCase):
     def test_requires_exact_increment_and_two_fresh_confirmations(self):
@@ -117,8 +124,8 @@ class PickupTests(unittest.TestCase):
             with self.subTest(current=current):
                 with self.assertRaisesRegex(SafetyError, "unexpected"):
                     PickupCheck(inventory(2), "Cowhide", 0).observe(1, .1, current)
-        with self.assertRaisesRegex(SafetyError, "four seconds"):
-            PickupCheck(inventory(), "Cowhide", 0).observe(1, 4.1, inventory())
+        with self.assertRaisesRegex(SafetyError, "fifteen seconds"):
+            PickupCheck(inventory(), "Cowhide", 0).observe(1, 15.1, inventory())
 
     def test_full_and_unapproved_inventory_rejected(self):
         with self.assertRaises(SafetyError):
@@ -131,9 +138,9 @@ class PickupTests(unittest.TestCase):
 
     def test_late_second_confirmation_cannot_pass_timeout(self):
         check = PickupCheck(inventory(1), "Cowhide", 0)
-        self.assertFalse(check.observe(1, 3.9, inventory(2)))
-        with self.assertRaisesRegex(SafetyError, "four seconds"):
-            check.observe(2, 4.1, inventory(2))
+        self.assertFalse(check.observe(1, 14.9, inventory(2)))
+        with self.assertRaisesRegex(SafetyError, "fifteen seconds"):
+            check.observe(2, 15.1, inventory(2))
 
 
 class VisionTests(unittest.TestCase):
@@ -173,6 +180,10 @@ class VisionTests(unittest.TestCase):
         corrupt[70:82, 60:94] = 0
         self.assertIsNone(self.vision.health(corrupt))
         self.assertFalse(self.vision.hud_clear(corrupt))
+        scenery = load_image(
+            ROOT / "cow_runs" / "20261117_013622_347050" / "00001_READY.png",
+        )
+        self.assertTrue(self.vision.hud_clear(scenery))
 
     def test_actual_before_after_hide_increment_not_stack_ocr(self):
         before = self.vision.inventory(self.image("before_take_cowhide"))
@@ -271,13 +282,20 @@ class VisionTests(unittest.TestCase):
     def test_bot_reopens_hidden_inventory_before_resuming_loot_search(self):
         vision = Mock()
         vision.settings = {"loot_radius": 130, "loot_fine_radius": 48}
+        vision.loot_candidates.side_effect = [
+            [((1036, 554), "fine")],
+            [],
+        ]
         vision.loot_grid.return_value = iter([((1036, 554), "fine")])
         vision.hover.return_value = "Walk here"
         desktop, audit = Mock(), Mock()
         desktop.vision = vision
-        desktop.fresh.return_value = Frame(
-            1, .1, np.zeros((1080, 1920, 3), dtype=np.uint8),
-        )
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh.side_effect = [
+            Frame(1, .1, image),
+            Frame(2, .2, image),
+            Frame(3, 25.1, image),
+        ]
         desktop.reopen_inventory_tab.return_value = Frame(
             2, .2, np.zeros((1080, 1920, 3), dtype=np.uint8),
         )
@@ -291,7 +309,7 @@ class VisionTests(unittest.TestCase):
                 bot.loot()
 
         desktop.reopen_inventory_tab.assert_called_once()
-        self.assertEqual(vision.loot_grid.call_count, 1)
+        vision.loot_grid.assert_not_called()
         states = [call.args[0] for call in audit.event.call_args_list]
         self.assertEqual(states[0], "INVENTORY_REOPENED")
         self.assertEqual(states[1], "LOOT_SEARCH_FINISHED")
@@ -354,7 +372,26 @@ class VisionTests(unittest.TestCase):
         with self.assertRaisesRegex(SafetyError, "Resolution"):
             self.vision.check_geometry(np.zeros((720, 1280, 3), dtype=np.uint8))
 
-    def test_loot_grid_starts_at_kill_center_then_expands_coarse(self):
+    def test_player_motion_measures_only_the_configured_anchor_region(self):
+        previous = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        current = previous.copy()
+        current[480:490, 910:920] = 255
+        self.assertEqual(self.vision.player_motion(previous, current), 100)
+        self.assertEqual(self.vision.player_motion(previous, previous), 0)
+
+    def test_busy_message_template_counts_repeated_chat_lines(self):
+        image = np.full((1080, 1920, 3), 255, dtype=np.uint8)
+        glyphs = self.vision.busy_message_template == 255
+        for top in (880, 894):
+            line = image[top:top + glyphs.shape[0], 56:56 + glyphs.shape[1]]
+            line[glyphs] = 0
+        self.assertEqual(self.vision.busy_message_count(image), 2)
+        self.assertEqual(
+            self.vision.busy_message_count(np.full_like(image, 255)),
+            0,
+        )
+
+    def test_loot_grid_spirals_outward_from_kill_center(self):
         center = (1036, 554)
         points = list(self.vision.loot_grid(center, radius=130, fine_radius=48))
         phases = [phase for _, phase in points]
@@ -372,13 +409,56 @@ class VisionTests(unittest.TestCase):
             48 ** 2 < (x - center[0]) ** 2 + (y - center[1]) ** 2 <= 130 ** 2
             for x, y in coarse
         ))
-        x0, y0 = 532, 122
-        self.assertTrue(all((x - x0) % 12 == 0 and (y - y0) % 12 == 0 for x, y in fine))
-        self.assertTrue(all((x - x0) % 24 == 0 and (y - y0) % 24 == 0 for x, y in coarse))
+        distances = [
+            np.hypot(point[0] - center[0], point[1] - center[1])
+            for point, _ in points
+        ]
+        self.assertTrue(all(
+            current + 1 >= previous for previous, current in zip(distances, distances[1:])
+        ))
+        self.assertGreater(distances[-1], 120)
+        self.assertTrue({
+            -1, 1,
+        }.issubset({int(np.sign(point[0] - center[0])) for point, _ in points}))
+        self.assertTrue({
+            -1, 1,
+        }.issubset({int(np.sign(point[1] - center[1])) for point, _ in points}))
+
+    def test_loot_candidates_use_bright_low_saturation_blobs_inside_radius(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        center = (940, 578)
+        image[570:587, 962:979] = 220
+        image[574:577, 968:971] = (220, 20, 20)
+        image[570:587, 1020:1037] = (0, 0, 255)
+        image[570:587, 1085:1102] = 220
+        candidates = self.vision.loot_candidates(image, center, radius=130)
+        self.assertEqual(len(candidates), 1)
+        point, phase = candidates[0]
+        self.assertLessEqual(abs(point[0] - 970), 5)
+        self.assertLessEqual(abs(point[1] - 578), 5)
+        self.assertEqual(phase, "fine")
+
+    def test_loot_candidates_match_the_reference_cowhide_sprite(self):
+        image = self.image("take_cowhide")
+        candidates = self.vision.loot_candidates(image, (982, 519), radius=130)
+        self.assertTrue(any(
+            abs(point[0] - 980) <= 5 and abs(point[1] - 517) <= 5
+            for point, _ in candidates
+        ))
+
+    def test_loot_candidates_allows_partially_occluded_cowhide_near_center(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        center = (940, 520)
+        image[500:508, 936:945] = 220
+        image[502:505, 939:942] = (220, 20, 20)
+        candidates = self.vision.loot_candidates(image, center, radius=130, fine_radius=48)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0][1], "fine")
 
     def test_loot_search_uses_kill_point_and_logs_scan_metrics(self):
         vision = Mock()
         vision.settings = {"loot_radius": 130, "loot_fine_radius": 48}
+        vision.loot_candidates.return_value = []
         vision.loot_grid.return_value = iter([
             ((1036, 554), "fine"),
             ((1060, 554), "coarse"),
@@ -387,7 +467,7 @@ class VisionTests(unittest.TestCase):
         desktop, audit = Mock(), Mock()
         desktop.vision = vision
         desktop.fresh.return_value = Frame(1, 1, np.zeros((1080, 1920, 3), dtype=np.uint8))
-        bot = Bot(desktop, Mode.COWHIDE_ONLY, None, audit)
+        bot = Bot(desktop, Mode.BONES_ONLY, None, audit)
         bot.last_kill_point = (1036, 554)
         with patch("cow_desktop.stable_inventory", return_value=inventory()):
             with patch("cow_desktop.time.monotonic", return_value=0):
@@ -401,6 +481,7 @@ class VisionTests(unittest.TestCase):
         self.assertEqual(metrics["scanned_points"], 2)
         self.assertEqual(metrics["fine_points"], 1)
         self.assertEqual(metrics["coarse_points"], 1)
+        self.assertEqual(metrics["color_candidates"], 0)
         self.assertEqual(metrics["hover_matches"], 0)
         self.assertEqual(metrics["farthest_distance"], 24)
         self.assertEqual(metrics["stop_reason"], "region_exhausted")
@@ -408,6 +489,7 @@ class VisionTests(unittest.TestCase):
     def test_cowhide_only_stops_after_verified_pickup(self):
         vision = Mock()
         vision.settings = {"loot_radius": 130, "loot_fine_radius": 48}
+        vision.loot_candidates.return_value = [((1036, 554), "fine")]
         vision.loot_grid.return_value = iter([
             ((1036, 554), "fine"),
             ((1048, 554), "fine"),
@@ -422,6 +504,7 @@ class VisionTests(unittest.TestCase):
             Frame(2, .2, image),
             Frame(3, .3, image),
             Frame(4, .4, image),
+            Frame(5, .5, image),
         ]
         desktop.pick_menu.return_value = "Cowhide"
         bot = Bot(desktop, Mode.COWHIDE_ONLY, None, audit)
@@ -431,6 +514,8 @@ class VisionTests(unittest.TestCase):
                 bot.loot()
 
         self.assertEqual(vision.hover.call_count, 1)
+        vision.loot_grid.assert_not_called()
+        desktop.move_loot.assert_called_once_with((1036, 554))
         desktop.pick_menu.assert_called_once_with(
             (1036, 554), "Take Cowhide", ("Cowhide",),
         )
@@ -443,16 +528,100 @@ class VisionTests(unittest.TestCase):
         self.assertEqual(finish_calls[0].kwargs["scanned_points"], 1)
         self.assertEqual(finish_calls[0].kwargs["stop_reason"], "target_collected")
 
+    def test_cowhide_search_rechecks_frames_for_a_late_color_candidate(self):
+        vision = Mock()
+        vision.settings = {"loot_radius": 130, "loot_fine_radius": 48}
+        vision.loot_candidates.side_effect = [
+            [],
+            [((1036, 554), "fine")],
+        ]
+        vision.hover.return_value = "Take Cowhide"
+        vision.inventory.side_effect = [inventory(1), inventory(1), inventory(1)]
+        desktop, audit = Mock(), Mock()
+        desktop.vision = vision
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh.side_effect = [
+            Frame(1, .1, image),
+            Frame(2, .2, image),
+            Frame(3, .3, image),
+            Frame(4, .4, image),
+            Frame(5, .5, image),
+            Frame(6, .6, image),
+            Frame(7, 25.1, image),
+        ]
+        desktop.pick_menu.return_value = "Cowhide"
+        bot = Bot(desktop, Mode.COWHIDE_ONLY, None, audit)
+        bot.last_kill_point = (1036, 554)
+        with patch("cow_desktop.stable_inventory", side_effect=[inventory(), inventory()]):
+            with patch("cow_desktop.time.monotonic", return_value=0):
+                bot.loot()
+
+        self.assertEqual(bot.pickups, 1)
+        desktop.pick_menu.assert_called_once_with(
+            (1036, 554), "Take Cowhide", ("Cowhide",),
+        )
+        vision.loot_grid.assert_not_called()
+        finish_call = next(
+            call for call in audit.event.call_args_list
+            if call.args and call.args[0] == "LOOT_SEARCH_FINISHED"
+        )
+        self.assertEqual(finish_call.kwargs["color_candidates"], 1)
+        self.assertEqual(finish_call.kwargs["color_candidate_points"], [[1036, 554]])
+
+    def test_cowhide_search_probes_above_player_when_color_mask_misses_occluded_hide(self):
+        vision = Mock()
+        vision.settings = {
+            "loot_radius": 130,
+            "loot_fine_radius": 48,
+            "player_anchor": [942, 520],
+            "screen": [1920, 1080],
+        }
+        vision.loot_candidates.return_value = []
+        vision.hover.return_value = "Take Cowhide"
+        vision.inventory.side_effect = [inventory(1), inventory(1), inventory(1)]
+        desktop, audit = Mock(), Mock()
+        desktop.vision = vision
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh.side_effect = [
+            Frame(1, .1, image),
+            Frame(2, 2.2, image),
+            Frame(3, 2.3, image),
+            Frame(4, 2.4, image),
+            Frame(5, 2.5, image),
+            Frame(6, 2.6, image),
+        ]
+        desktop.pick_menu.return_value = "Cowhide"
+        bot = Bot(desktop, Mode.COWHIDE_ONLY, None, audit)
+        bot.last_kill_point = (964, 458)
+        with patch("cow_desktop.stable_inventory", side_effect=[inventory(), inventory()]):
+            with patch("cow_desktop.time.monotonic", return_value=0):
+                bot.loot()
+
+        self.assertEqual(bot.pickups, 1)
+        desktop.move_loot.assert_called_once_with((942, 504))
+        desktop.pick_menu.assert_called_once_with(
+            (942, 504), "Take Cowhide", ("Cowhide",),
+        )
+        finish_call = next(
+            call for call in audit.event.call_args_list
+            if call.args and call.args[0] == "LOOT_SEARCH_FINISHED"
+        )
+        self.assertEqual(finish_call.kwargs["stop_reason"], "target_collected")
+
     def test_cowhide_mode_ignores_bones_hover_candidates(self):
         vision = Mock()
         vision.settings = {"loot_radius": 130}
+        vision.loot_candidates.return_value = [((1036, 554), "fine")]
         vision.loot_grid.return_value = iter([((1036, 554), "fine")])
         vision.hover.return_value = "Take Bones"
         desktop, audit = Mock(), Mock()
         desktop.vision = vision
-        desktop.fresh.return_value = Frame(
-            1, .1, np.zeros((1080, 1920, 3), dtype=np.uint8),
-        )
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh.side_effect = [
+            Frame(1, .1, image),
+            Frame(2, .2, image),
+            Frame(3, 25.1, image),
+        ]
         bot = Bot(desktop, Mode.COWHIDE_ONLY, None, audit)
         bot.last_kill_point = (1036, 554)
         with patch("cow_desktop.stable_inventory", return_value=inventory()):
@@ -460,10 +629,37 @@ class VisionTests(unittest.TestCase):
                 bot.loot()
 
         desktop.pick_menu.assert_not_called()
+        vision.loot_grid.assert_not_called()
         metrics = audit.event.call_args.kwargs
         self.assertEqual(metrics["hover_matches"], 0)
         self.assertEqual(metrics["ignored_item_matches"], 1)
-        self.assertEqual(metrics["stop_reason"], "region_exhausted")
+
+    def test_both_mode_spiral_fallback_does_not_pick_cowhide(self):
+        vision = Mock()
+        vision.settings = {"loot_radius": 130}
+        vision.loot_candidates.return_value = []
+        vision.loot_grid.return_value = iter([((1036, 554), "fine")])
+        vision.hover.return_value = "Take Cowhide"
+        desktop, audit = Mock(), Mock()
+        desktop.vision = vision
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh.side_effect = [
+            Frame(1, .1, image),
+            Frame(2, .2, image),
+            Frame(3, .3, image),
+            Frame(4, 25.1, image),
+        ]
+        bot = Bot(desktop, Mode.COWHIDE_AND_BONES, None, audit)
+        bot.last_kill_point = (1036, 554)
+        with patch("cow_desktop.stable_inventory", return_value=inventory()):
+            with patch("cow_desktop.time.monotonic", return_value=0):
+                bot.loot()
+
+        desktop.pick_menu.assert_not_called()
+        metrics = audit.event.call_args.kwargs
+        self.assertEqual(metrics["scanned_points"], 1)
+        self.assertEqual(metrics["ignored_item_matches"], 1)
+        self.assertEqual(metrics["stop_reason"], "time_budget")
 
     def test_attack_search_gets_its_full_budget_after_hud_clear(self):
         vision = Mock()
@@ -471,10 +667,10 @@ class VisionTests(unittest.TestCase):
         vision.grid.return_value = iter([(1036, 554)])
         vision.hud_clear.side_effect = [False, True, True]
         vision.hover.return_value = "Attack Cow (level-2)"
-        vision.health.side_effect = [
-            Health("Cow", True),
-            Health("Cow", False),
-            Health("Cow", False),
+        vision.busy_message_count.return_value = 0
+        vision.player_motion.side_effect = [100, 100, 100] + [0] * 7
+        vision.health.side_effect = [Health("Cow", True)] * 10 + [
+            Health("Cow", False), Health("Cow", False),
         ]
         desktop, audit = Mock(), Mock()
         desktop.vision = vision
@@ -484,9 +680,18 @@ class VisionTests(unittest.TestCase):
             Frame(2, 7.5, image),
             Frame(3, 15.1, image),
             Frame(4, 15.2, image),
-            Frame(5, 15.3, image),
-            Frame(6, 15.4, image),
-            Frame(7, 15.5, image),
+            Frame(5, 20.3, image),
+            Frame(6, 25.1, image),
+            Frame(7, 25.2, image),
+            Frame(8, 25.3, image),
+            Frame(9, 25.4, image),
+            Frame(10, 25.5, image),
+            Frame(11, 25.6, image),
+            Frame(12, 25.7, image),
+            Frame(13, 25.8, image),
+            Frame(14, 25.9, image),
+            Frame(15, 26.0, image),
+            Frame(16, 26.1, image),
         ]
         clock = {"now": 0}
 
@@ -505,10 +710,140 @@ class VisionTests(unittest.TestCase):
             (1036, 554), "Attack Cow (level-2)", idle=True,
         )
         self.assertEqual(bot.kills, 1)
+        self.assertIn(
+            "PLAYER_STOPPED",
+            [call.args[0] for call in audit.event.call_args_list],
+        )
+
+    def test_new_busy_message_blacklists_nearby_target_for_later_search(self):
+        vision = Mock()
+        vision.settings = {"player_anchor": [942, 520]}
+        vision.grid.side_effect = lambda center: iter([
+            (1036, 554), (1060, 554),
+        ])
+        vision.hud_clear.return_value = True
+        vision.hover.return_value = "Attack Cow (level-2)"
+        vision.busy_message_count.side_effect = [0, 1]
+        desktop, audit = Mock(), Mock()
+        desktop.vision = vision
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh.side_effect = [
+            Frame(1, .1, image),
+            Frame(2, .2, image),
+            Frame(3, .3, image),
+            Frame(4, .4, image),
+            Frame(5, .5, image),
+            Frame(6, .6, image),
+        ]
+        desktop.guarded_click.return_value = True
+        bot = Bot(desktop, Mode.COMBAT_ONLY, None, audit)
+        with patch("cow_desktop.time.monotonic", return_value=0):
+            self.assertFalse(bot.attack())
+            self.assertFalse(bot.attack())
+
+        desktop.guarded_click.assert_called_once()
+        self.assertEqual(bot.blacklisted_targets, [((1036, 554), 20)])
+        self.assertIn(
+            "TARGET_BLACKLISTED",
+            [call.args[0] for call in audit.event.call_args_list],
+        )
+
+    def test_attack_miss_without_a_new_busy_message_does_not_blacklist(self):
+        vision = Mock()
+        vision.settings = {"player_anchor": [942, 520]}
+        vision.grid.return_value = iter([(1036, 554)])
+        vision.hud_clear.return_value = True
+        vision.hover.return_value = "Attack Cow (level-2)"
+        vision.target_in_combat.return_value = False
+        vision.busy_message_count.return_value = 0
+        vision.busy_message_added.return_value = False
+        vision.player_motion.return_value = 0
+        vision.health.return_value = None
+        desktop, audit = Mock(), Mock()
+        desktop.vision = vision
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh.side_effect = [
+            Frame(1, .1, image),
+            Frame(2, .2, image),
+            Frame(3, .3, image),
+            *[Frame(number, number / 10, image) for number in range(4, 11)],
+            Frame(11, 11.1, image),
+        ]
+        desktop.guarded_click.return_value = True
+        bot = Bot(desktop, Mode.COMBAT_ONLY, None, audit)
+        with patch("cow_desktop.time.monotonic", return_value=0):
+            self.assertFalse(bot.attack())
+
+        self.assertEqual(bot.blacklisted_targets, [])
+        self.assertIn(
+            "ATTACK_MISSED",
+            [call.args[0] for call in audit.event.call_args_list],
+        )
+
+    def test_target_in_combat_detects_overhead_health_bar(self):
+        busy = load_image(
+            ROOT / "cow_runs" / "20261117_011210_170702" / "00002_ATTACK_CLICK.png",
+        )
+        self.assertTrue(self.vision.target_in_combat(busy, (940, 482)))
+        self.assertFalse(self.vision.target_in_combat(self.image("attack_cow"), (940, 482)))
+
+    def test_attack_skips_and_blacklists_target_already_in_combat_without_clicking(self):
+        vision = Mock()
+        vision.settings = {"player_anchor": [942, 520]}
+        vision.grid.side_effect = lambda center: iter([(1036, 554), (1120, 554)])
+        vision.hud_clear.return_value = True
+        vision.hover.return_value = "Attack Cow (level-2)"
+        vision.target_in_combat.side_effect = [True, False]
+        vision.busy_message_count.return_value = 0
+        vision.busy_message_added.return_value = False
+        vision.player_motion.return_value = 0
+        vision.health.side_effect = [Health("Cow", True)] * 7 + [
+            Health("Cow", False), Health("Cow", False),
+        ]
+        desktop, audit = Mock(), Mock()
+        desktop.vision = vision
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh.side_effect = [
+            Frame(number, number / 10, image) for number in range(1, 20)
+        ]
+        desktop.guarded_click.return_value = True
+        bot = Bot(desktop, Mode.COMBAT_ONLY, None, audit)
+        with patch("cow_desktop.time.monotonic", return_value=0):
+            self.assertTrue(bot.attack())
+
+        desktop.guarded_click.assert_called_once_with(
+            (1120, 554), "Attack Cow (level-2)", idle=True,
+        )
+        self.assertEqual(bot.blacklisted_targets, [((1036, 554), 20)])
+        self.assertIn(
+            "TARGET_BLACKLISTED",
+            [call.args[0] for call in audit.event.call_args_list],
+        )
+
+    def test_busy_message_added_detects_scrolled_full_chat(self):
+        base = load_image(
+            ROOT / "cow_runs" / "20261117_011210_170702" / "00002_ATTACK_CLICK.png",
+        )
+        scrolled = base.copy()
+        x, y, w, h = (0, 870, 520, 130)
+        chat = scrolled[y:y + h, x:x + w]
+        rows = self.vision.busy_message_rows(base)
+        self.assertEqual(len(rows), 4)
+        row_h = self.vision.busy_message_template.shape[0]
+        last_row = rows[-1]
+        # Scroll visible busy lines up by one line height and place a fresh copy at the bottom.
+        step = rows[1] - rows[0]
+        chat[rows[0]:last_row + row_h - step] = chat[rows[0] + step:last_row + row_h]
+        chat[last_row - 1:last_row - 1 + row_h] = chat[last_row:last_row + row_h]
+        # Shift timestamp pixel slightly to simulate a new minute/scroll difference on the last row.
+        chat[last_row:last_row + 2, 12:18] = 255
+        self.assertFalse(self.vision.busy_message_added(base, base))
+        self.assertTrue(self.vision.busy_message_added(base, scrolled))
 
     def test_found_cowhide_is_processed_even_if_search_budget_expires(self):
         vision = Mock()
         vision.settings = {"loot_radius": 130}
+        vision.loot_candidates.return_value = [((1036, 554), "fine")]
         vision.loot_grid.return_value = iter([((1036, 554), "fine")])
         clock = {"now": 0}
 
@@ -523,9 +858,10 @@ class VisionTests(unittest.TestCase):
         image = np.zeros((1080, 1920, 3), dtype=np.uint8)
         desktop.fresh.side_effect = [
             Frame(1, .1, image),
-            Frame(2, 26.1, image),
-            Frame(3, 26.2, image),
-            Frame(4, 26.3, image),
+            Frame(2, .2, image),
+            Frame(3, 26.1, image),
+            Frame(4, 26.2, image),
+            Frame(5, 26.3, image),
         ]
         desktop.pick_menu.return_value = "Cowhide"
         bot = Bot(desktop, Mode.COWHIDE_ONLY, None, audit)
@@ -545,18 +881,22 @@ class VisionTests(unittest.TestCase):
     def test_loot_search_does_not_inspect_a_point_after_time_budget(self):
         vision = Mock()
         vision.settings = {"loot_radius": 130}
+        vision.loot_candidates.return_value = []
         vision.loot_grid.return_value = iter([((1036, 554), "fine")])
         vision.hover.return_value = "Walk here"
         desktop, audit = Mock(), Mock()
         desktop.vision = vision
+        desktop.fresh.return_value = Frame(
+            1, .1, np.zeros((1080, 1920, 3), dtype=np.uint8),
+        )
         clock = {"now": 0}
         desktop.move.side_effect = lambda point: clock.update(now=26)
-        bot = Bot(desktop, Mode.COWHIDE_ONLY, None, audit)
+        bot = Bot(desktop, Mode.BONES_ONLY, None, audit)
         bot.last_kill_point = (1036, 554)
         with patch("cow_desktop.stable_inventory", return_value=inventory()):
             with patch("cow_desktop.time.monotonic", side_effect=lambda: clock["now"]):
                 bot.loot()
-        desktop.fresh.assert_not_called()
+        self.assertEqual(desktop.fresh.call_count, 2)
         vision.hover.assert_not_called()
         metrics = audit.event.call_args.kwargs
         self.assertEqual(metrics["scanned_points"], 0)
@@ -573,6 +913,60 @@ class VisionTests(unittest.TestCase):
         image = self.image("attack_cow")
         desktop.fresh = Mock(side_effect=[Frame(1, 1, image), Frame(2, 2, image)])
         return desktop
+
+    def test_loot_move_overshoots_then_corrects_to_target(self):
+        desktop = object.__new__(Desktop)
+        desktop.vision = Mock(settings={"screen": (1920, 1080)})
+        desktop.cursor = (500, 500)
+        desktop.mouse = Mock()
+        desktop.move = Mock()
+        with patch(
+            "cow_desktop.random.uniform",
+            side_effect=[2.0, 0.0, 0.12, 0.14, 0.10],
+        ):
+            desktop.move_loot((600, 550))
+
+        calls = desktop.move.call_args_list
+        self.assertEqual(len(calls), 3)
+        overshoot_point = calls[1].args[0]
+        self.assertGreater(overshoot_point[0], 600)
+        self.assertGreater(overshoot_point[1], 550)
+        self.assertEqual(calls[-1].args[0], (600, 550))
+
+    def test_cowhide_pick_menu_uses_bounded_normal_reaction_delay(self):
+        desktop = self.fake_desktop(self.image("attack_cow"))
+        hover, menu = self.image("take_cowhide"), self.image("rightclick_menu")
+        images = [hover, hover, menu, menu, menu]
+        desktop.fresh.side_effect = [
+            Frame(i, i, image) for i, image in enumerate(images, 1)
+        ]
+        desktop.snapshot.side_effect = [hover, menu]
+        with patch("cow_desktop.random.gauss", return_value=0.1):
+            with patch("cow_desktop.time.sleep") as sleep:
+                result = desktop.pick_menu((860, 540), "Take Cowhide", ("Cowhide",))
+
+        self.assertEqual(result, "Cowhide")
+        sleep.assert_called_once_with(0.2)
+
+    def test_capture_timestamps_frame_before_snapshot(self):
+        desktop = object.__new__(Desktop)
+        desktop.stop = threading.Event()
+        desktop.frames = deque(maxlen=20)
+        desktop.condition = threading.Condition()
+        desktop.sequence = 0
+        desktop.error = None
+        clock = {"now": 1.0}
+
+        def snapshot():
+            clock["now"] = 2.0
+            desktop.stop.set()
+            return np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        desktop.snapshot = snapshot
+        with patch("cow_desktop.time.monotonic", side_effect=lambda: clock["now"]):
+            desktop._capture()
+        self.assertEqual(desktop.frames[0].started_at, 1.0)
+        self.assertEqual(desktop.frames[0].at, 2.0)
 
     def test_final_guard_blocks_changed_target_and_stale_positive_hud(self):
         for final in (self.image("attack_cowcalf"), self.image("attacking_cow")):
@@ -591,6 +985,20 @@ class VisionTests(unittest.TestCase):
         hover, menu = self.image("take_cowhide"), self.image("rightclick_menu")
         images = [hover, hover, menu, menu, menu]
         desktop.fresh.side_effect = [Frame(i, i, image) for i, image in enumerate(images, 1)]
+        desktop.snapshot.side_effect = [hover, menu]
+        result = desktop.pick_menu((860, 540), "Take Cowhide", ("Bones",))
+        self.assertEqual(result, "Bones")
+        self.assertEqual(desktop.mouse.click.call_count, 2)
+        self.assertEqual(desktop.mouse.click.call_args_list[0].kwargs, {"button": "right"})
+        self.assertEqual(desktop.mouse.click.call_args_list[1].kwargs, {})
+
+    def test_pick_menu_retries_when_first_post_click_frame_has_no_menu(self):
+        desktop = self.fake_desktop(self.image("attack_cow"))
+        hover, menu = self.image("take_cowhide"), self.image("rightclick_menu")
+        images = [hover, hover, self.image("attack_cow"), menu, menu, menu]
+        desktop.fresh.side_effect = [
+            Frame(i, i, image) for i, image in enumerate(images, 1)
+        ]
         desktop.snapshot.side_effect = [hover, menu]
         result = desktop.pick_menu((860, 540), "Take Cowhide", ("Bones",))
         self.assertEqual(result, "Bones")

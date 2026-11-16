@@ -1,0 +1,39 @@
+{"event": 1, "at": 1794844827.849578, "state": "INVENTORY_REOPENED", "cowhide": 25, "bones": 0, "empty": 3, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1794844828.0825264, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1794844833.061713, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [868, 482], "screenshot": "00003_ATTACK_CLICK.png"}
+{"event": 4, "at": 1794844836.0344718, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00004_PLAYER_STOPPED.png"}
+{"event": 5, "at": 1794844842.164704, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00005_KILL_VERIFIED.png"}
+{"event": 6, "at": 1794844848.1433754, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00006_PICKUP_CLICK.png"}
+{"event": 7, "at": 1794844849.2861128, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 1, "screenshot": "00007_PICKUP_VERIFIED.png"}
+{"event": 8, "at": 1794844849.4367223, "state": "LOOT_SEARCH_FINISHED", "center": [868, 482], "scanned_points": 43, "fine_points": 40, "coarse_points": 3, "color_candidates": 6, "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 72.1, "elapsed_seconds": 6.93, "stop_reason": "target_collected", "screenshot": "00008_LOOT_SEARCH_FINISHED.png"}
+{"event": 9, "at": 1794844866.4465635, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [1084, 434], "screenshot": "00009_ATTACK_CLICK.png"}
+{"event": 10, "at": 1794844871.7059455, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00010_PLAYER_STOPPED.png"}
+{"event": 11, "at": 1794844875.6811264, "state": "KILL_VERIFIED", "kills": 2, "screenshot": "00011_KILL_VERIFIED.png"}
+{"event": 12, "at": 1794844890.3012187, "state": "LOOT_SEARCH_FINISHED", "center": [1084, 434], "scanned_points": 134, "fine_points": 53, "coarse_points": 81, "color_candidates": 1, "hover_matches": 0, "ignored_item_matches": 0, "farthest_distance": 129.8, "elapsed_seconds": 14.3, "stop_reason": "region_exhausted", "screenshot": "00012_LOOT_SEARCH_FINISHED.png"}
+{"event": 13, "at": 1794844896.6139297, "state": "ATTACK_CLICK", "action": "Attack Cow calf (level-2)", "point": [892, 602], "screenshot": "00013_ATTACK_CLICK.png"}
+{"event": 14, "at": 1794844901.0175157, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00014_PLAYER_STOPPED.png"}
+{"event": 15, "at": 1794844902.7150888, "state": "KILL_VERIFIED", "kills": 3, "screenshot": "00015_KILL_VERIFIED.png"}
+{"event": 16, "at": 1794844918.1918068, "state": "LOOT_SEARCH_FINISHED", "center": [892, 602], "scanned_points": 141, "fine_points": 54, "coarse_points": 87, "color_candidates": 8, "hover_matches": 0, "ignored_item_matches": 1, "farthest_distance": 129.8, "elapsed_seconds": 15.16, "stop_reason": "region_exhausted", "screenshot": "00016_LOOT_SEARCH_FINISHED.png"}
+{"event": 17, "at": 1794844920.347478, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [916, 482], "screenshot": "00017_ATTACK_CLICK.png"}
+{"event": 18, "at": 1794844923.6347585, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00018_PLAYER_STOPPED.png"}
+{"event": 19, "at": 1794844933.7500143, "state": "ATTACK_MISSED", "screenshot": "00019_ATTACK_MISSED.png"}
+{"event": 20, "at": 1794844933.9643478, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 1, "screenshot": "00020_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 21, "at": 1794844938.3958805, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [988, 458], "screenshot": "00021_ATTACK_CLICK.png"}
+{"event": 22, "at": 1794844938.6499782, "state": "TARGET_BLACKLISTED", "point": [988, 458], "duration_seconds": 20, "message": "Someone else is fighting that", "screenshot": "00022_TARGET_BLACKLISTED.png"}
+{"event": 23, "at": 1794844938.8480098, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 2, "screenshot": "00023_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 24, "at": 1794844942.2842038, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [916, 458], "screenshot": "00024_ATTACK_CLICK.png"}
+{"event": 25, "at": 1794844942.8341205, "state": "TARGET_BLACKLISTED", "point": [916, 458], "duration_seconds": 20, "message": "Someone else is fighting that", "screenshot": "00025_TARGET_BLACKLISTED.png"}
+{"event": 26, "at": 1794844943.061651, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 3, "screenshot": "00026_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 27, "at": 1794844952.252425, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [868, 410], "screenshot": "00027_ATTACK_CLICK.png"}
+{"event": 28, "at": 1794844956.9307418, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00028_PLAYER_STOPPED.png"}
+{"event": 29, "at": 1794844965.698908, "state": "KILL_VERIFIED", "kills": 4, "screenshot": "00029_KILL_VERIFIED.png"}
+{"event": 30, "at": 1794844967.2846708, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00030_PICKUP_CLICK.png"}
+{"event": 31, "at": 1794844969.2714436, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 2, "screenshot": "00031_PICKUP_VERIFIED.png"}
+{"event": 32, "at": 1794844969.416896, "state": "LOOT_SEARCH_FINISHED", "center": [868, 410], "scanned_points": 1, "fine_points": 0, "coarse_points": 1, "color_candidates": 1, "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 91.6, "elapsed_seconds": 3.41, "stop_reason": "target_collected", "screenshot": "00032_LOOT_SEARCH_FINISHED.png"}
+{"event": 33, "at": 1794844982.0633664, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [988, 410], "screenshot": "00033_ATTACK_CLICK.png"}
+{"event": 34, "at": 1794844986.4206085, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00034_PLAYER_STOPPED.png"}
+{"event": 35, "at": 1794844997.6038873, "state": "KILL_VERIFIED", "kills": 5, "screenshot": "00035_KILL_VERIFIED.png"}
+{"event": 36, "at": 1794845009.5405827, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00036_PICKUP_CLICK.png"}
+{"event": 37, "at": 1794845010.783631, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 3, "screenshot": "00037_PICKUP_VERIFIED.png"}
+{"event": 38, "at": 1794845010.928847, "state": "LOOT_SEARCH_FINISHED", "center": [988, 410], "scanned_points": 99, "fine_points": 53, "coarse_points": 46, "color_candidates": 0, "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 102.8, "elapsed_seconds": 12.98, "stop_reason": "target_collected", "screenshot": "00038_LOOT_SEARCH_FINISHED.png"}
+{"event": 39, "at": 1794845011.3198624, "state": "SAFE_STOP", "reason": "Inventory full; no calibrated banking route is loaded", "screenshot": "00039_SAFE_STOP.png"}

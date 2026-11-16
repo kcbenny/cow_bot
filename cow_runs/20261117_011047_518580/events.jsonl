@@ -1,0 +1,11 @@
+{"event": 1, "at": 1794849053.323166, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794849054.465108, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [964, 530], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1794849055.1027749, "state": "TARGET_BLACKLISTED", "point": [964, 530], "duration_seconds": 20, "message": "Someone else is fighting that", "screenshot": "00003_TARGET_BLACKLISTED.png"}
+{"event": 4, "at": 1794849055.3042228, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 1, "screenshot": "00004_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 5, "at": 1794849056.2079272, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [916, 530], "screenshot": "00005_ATTACK_CLICK.png"}
+{"event": 6, "at": 1794849056.8619063, "state": "TARGET_BLACKLISTED", "point": [916, 530], "duration_seconds": 20, "message": "Someone else is fighting that", "screenshot": "00006_TARGET_BLACKLISTED.png"}
+{"event": 7, "at": 1794849057.059536, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 2, "screenshot": "00007_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 8, "at": 1794849070.628697, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [940, 362], "screenshot": "00008_ATTACK_CLICK.png"}
+{"event": 9, "at": 1794849077.0497828, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00009_PLAYER_STOPPED.png"}
+{"event": 10, "at": 1794849088.1630657, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00010_KILL_VERIFIED.png"}
+{"event": 11, "at": 1794849111.4265728, "state": "SAFE_STOP", "reason": "Capture failed: Foreground-window check failed: unexpected foreground title='\u5de5\u4f5c\u5207\u63db'", "screenshot": "00011_SAFE_STOP.png"}
