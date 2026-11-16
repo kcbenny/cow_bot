@@ -1,0 +1,2 @@
+{"event": 1, "at": 1794683186.8340287, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794683197.1305947, "state": "SAFE_STOP", "reason": "Capture failed: Foreground-window check failed: unexpected foreground title='fighting - Visual Studio Code'", "screenshot": "00002_SAFE_STOP.png"}

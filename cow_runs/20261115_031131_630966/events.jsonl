@@ -1,0 +1,2 @@
+{"event": 1, "at": 1794683497.6564631, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794683513.165507, "state": "SAFE_STOP", "reason": "Combat HUD did not clear before next attack", "screenshot": "00002_SAFE_STOP.png"}

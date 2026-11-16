@@ -1,0 +1,5 @@
+{"event": 1, "at": 1794677011.7442524, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794677021.761405, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [1036, 554], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1794677032.4999728, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00003_KILL_VERIFIED.png"}
+{"event": 4, "at": 1794677043.0961275, "state": "LOOT_SEARCH_FINISHED", "screenshot": "00004_LOOT_SEARCH_FINISHED.png"}
+{"event": 5, "at": 1794677043.2762792, "state": "KILL_LIMIT_REACHED", "kills": 1, "screenshot": "00005_KILL_LIMIT_REACHED.png"}

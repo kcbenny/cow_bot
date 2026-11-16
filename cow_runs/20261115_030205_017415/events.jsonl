@@ -1,0 +1,2 @@
+{"event": 1, "at": 1794682930.9268928, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794682945.6691067, "state": "SAFE_STOP", "reason": "Capture failed: Official OSRS window must remain in the foreground", "screenshot": "00002_SAFE_STOP.png"}

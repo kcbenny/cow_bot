@@ -1,0 +1,37 @@
+{"event": 1, "at": 1794838718.3414855, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794838724.9894037, "state": "ATTACK_CLICK", "action": "Attack Cow calf (level-2)", "point": [1012, 482], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1794838736.0043461, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00003_KILL_VERIFIED.png"}
+{"event": 4, "at": 1794838746.352534, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00004_PICKUP_CLICK.png"}
+{"event": 5, "at": 1794838747.476675, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 1, "screenshot": "00005_PICKUP_VERIFIED.png"}
+{"event": 6, "at": 1794838747.5825267, "state": "LOOT_SEARCH_FINISHED", "center": [1012, 482], "scanned_points": 56, "fine_points": 49, "coarse_points": 7, "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 53.7, "elapsed_seconds": 11.26, "stop_reason": "target_collected", "screenshot": "00006_LOOT_SEARCH_FINISHED.png"}
+{"event": 7, "at": 1794838751.7738295, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [892, 554], "screenshot": "00007_ATTACK_CLICK.png"}
+{"event": 8, "at": 1794838760.572113, "state": "KILL_VERIFIED", "kills": 2, "screenshot": "00008_KILL_VERIFIED.png"}
+{"event": 9, "at": 1794838766.7051818, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00009_PICKUP_CLICK.png"}
+{"event": 10, "at": 1794838767.8489006, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 2, "screenshot": "00010_PICKUP_VERIFIED.png"}
+{"event": 11, "at": 1794838767.9968662, "state": "LOOT_SEARCH_FINISHED", "center": [892, 554], "scanned_points": 29, "fine_points": 29, "coarse_points": 0, "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 36.0, "elapsed_seconds": 7.11, "stop_reason": "target_collected", "screenshot": "00011_LOOT_SEARCH_FINISHED.png"}
+{"event": 12, "at": 1794838770.19027, "state": "ATTACK_CLICK", "action": "Attack Cow calf (level-2)", "point": [940, 554], "screenshot": "00012_ATTACK_CLICK.png"}
+{"event": 13, "at": 1794838781.0884602, "state": "KILL_VERIFIED", "kills": 3, "screenshot": "00013_KILL_VERIFIED.png"}
+{"event": 14, "at": 1794838791.5245826, "state": "LOOT_SEARCH_FINISHED", "center": [940, 554], "scanned_points": 63, "fine_points": 49, "coarse_points": 14, "hover_matches": 0, "ignored_item_matches": 3, "farthest_distance": 72.0, "elapsed_seconds": 10.13, "stop_reason": "time_budget", "screenshot": "00014_LOOT_SEARCH_FINISHED.png"}
+{"event": 15, "at": 1794838800.0058198, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [868, 578], "screenshot": "00015_ATTACK_CLICK.png"}
+{"event": 16, "at": 1794838803.0766442, "state": "ATTACK_MISSED", "screenshot": "00016_ATTACK_MISSED.png"}
+{"event": 17, "at": 1794838803.2464273, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 1, "screenshot": "00017_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 18, "at": 1794838806.1236742, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [916, 554], "screenshot": "00018_ATTACK_CLICK.png"}
+{"event": 19, "at": 1794838809.1497567, "state": "ATTACK_MISSED", "screenshot": "00019_ATTACK_MISSED.png"}
+{"event": 20, "at": 1794838809.4690864, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 2, "screenshot": "00020_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 21, "at": 1794838810.8569293, "state": "ATTACK_CLICK", "action": "Attack Cow calf (level-2)", "point": [940, 506], "screenshot": "00021_ATTACK_CLICK.png"}
+{"event": 22, "at": 1794838821.9356997, "state": "KILL_VERIFIED", "kills": 4, "screenshot": "00022_KILL_VERIFIED.png"}
+{"event": 23, "at": 1794838823.7077327, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00023_PICKUP_CLICK.png"}
+{"event": 24, "at": 1794838824.9829535, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 3, "screenshot": "00024_PICKUP_VERIFIED.png"}
+{"event": 25, "at": 1794838825.0874817, "state": "LOOT_SEARCH_FINISHED", "center": [940, 506], "scanned_points": 1, "fine_points": 1, "coarse_points": 0, "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 0.0, "elapsed_seconds": 2.82, "stop_reason": "target_collected", "screenshot": "00025_LOOT_SEARCH_FINISHED.png"}
+{"event": 26, "at": 1794838840.7619267, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 1, "screenshot": "00026_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 27, "at": 1794838856.269067, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 2, "screenshot": "00027_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 28, "at": 1794838862.756629, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [868, 506], "screenshot": "00028_ATTACK_CLICK.png"}
+{"event": 29, "at": 1794838870.9589872, "state": "KILL_VERIFIED", "kills": 5, "screenshot": "00029_KILL_VERIFIED.png"}
+{"event": 30, "at": 1794838880.2582226, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00030_PICKUP_CLICK.png"}
+{"event": 31, "at": 1794838881.2313886, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 4, "screenshot": "00031_PICKUP_VERIFIED.png"}
+{"event": 32, "at": 1794838881.386469, "state": "LOOT_SEARCH_FINISHED", "center": [868, 506], "scanned_points": 49, "fine_points": 49, "coarse_points": 0, "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 48.0, "elapsed_seconds": 10.09, "stop_reason": "target_collected", "screenshot": "00032_LOOT_SEARCH_FINISHED.png"}
+{"event": 33, "at": 1794838885.75592, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [940, 458], "screenshot": "00033_ATTACK_CLICK.png"}
+{"event": 34, "at": 1794838888.8590186, "state": "ATTACK_MISSED", "screenshot": "00034_ATTACK_MISSED.png"}
+{"event": 35, "at": 1794838889.036568, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 1, "screenshot": "00035_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 36, "at": 1794838891.356981, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [940, 482], "screenshot": "00036_ATTACK_CLICK.png"}
+{"event": 37, "at": 1794838898.2690783, "state": "SAFE_STOP", "reason": "Capture failed: Foreground-window check failed: unexpected foreground title='\u5de5\u4f5c\u5207\u63db'", "screenshot": "00037_SAFE_STOP.png"}

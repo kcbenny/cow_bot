@@ -1,0 +1,5 @@
+{"event": 1, "at": 1794683591.3473632, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794683594.8014233, "state": "ATTACK_CLICK", "action": "Attack Cow calf (level-2)", "point": [916, 482], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1794683600.667328, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00003_KILL_VERIFIED.png"}
+{"event": 4, "at": 1794683611.309962, "state": "LOOT_SEARCH_FINISHED", "center": [916, 482], "scanned_points": 61, "fine_points": 49, "coarse_points": 12, "hover_matches": 1, "farthest_distance": 67.9, "elapsed_seconds": 10.32, "stop_reason": "time_budget", "screenshot": "00004_LOOT_SEARCH_FINISHED.png"}
+{"event": 5, "at": 1794683611.6089385, "state": "SAFE_STOP", "reason": "Inventory panel is hidden, obstructed, or changed", "screenshot": "00005_SAFE_STOP.png"}

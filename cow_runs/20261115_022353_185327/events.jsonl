@@ -1,0 +1,7 @@
+{"event": 1, "at": 1794680639.1022487, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1794680641.5812566, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [964, 554], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1794680654.9838388, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00003_KILL_VERIFIED.png"}
+{"event": 4, "at": 1794680662.1830254, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00004_PICKUP_CLICK.png"}
+{"event": 5, "at": 1794680663.416031, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 1, "screenshot": "00005_PICKUP_VERIFIED.png"}
+{"event": 6, "at": 1794680665.2991095, "state": "LOOT_SEARCH_FINISHED", "center": [964, 554], "scanned_points": 47, "fine_points": 47, "coarse_points": 0, "hover_matches": 1, "farthest_distance": 48.0, "elapsed_seconds": 10.01, "stop_reason": "time_budget", "screenshot": "00006_LOOT_SEARCH_FINISHED.png"}
+{"event": 7, "at": 1794680665.6160614, "state": "KILL_LIMIT_REACHED", "kills": 1, "screenshot": "00007_KILL_LIMIT_REACHED.png"}
