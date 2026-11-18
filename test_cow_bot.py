@@ -11,12 +11,20 @@ from unittest.mock import Mock, call, patch
 import cv2
 import numpy as np
 
-from cow_bot import countdown, main, replay
+from cow_bot import (
+    arrival_timeout, countdown, main, point_inside_rect, preview_point_to_image, replay,
+    load_route_progress, report_route_resume, route_action, route_hover_action, route_progress_path,
+    route_step_count, route_step_prompt, route_stair_action, save_route_progress, select_rect,
+    save_route_landmarks, split_finished_round_trip,
+    show_route_resume_context, validate_recorded_route,
+)
 from cow_core import (
     Health, HealthLock, Inventory, InventoryPanelUnavailable, Mode, PickupCheck, SafetyError,
 )
-from cow_desktop import Bot, Desktop, Frame, Route, foreground_window_problem, locate
-from cow_vision import ROOT, Vision, bootstrap, crop, load_image, text_mask
+from cow_desktop import (
+    Bot, Desktop, Frame, Route, foreground_window_problem, locate, menu_template_location,
+)
+from cow_vision import ROOT, Vision, bootstrap, crop, learn_line, load_image, save_image, text_mask
 
 
 def inventory(hides=0, bones=0, other=0):
@@ -45,6 +53,230 @@ class CountdownTests(unittest.TestCase):
         )
         self.assertEqual(sleep.call_count, 5)
         sleep.assert_has_calls([call(1)] * 5)
+
+    def test_route_step_count_reprompts_until_valid_integer(self):
+        output = io.StringIO()
+        with patch("builtins.input", side_effect=["many", "0", "3"]), contextlib.redirect_stdout(output):
+            self.assertEqual(route_step_count("牛欄去銀行"), 3)
+        self.assertIn("請只輸入 1 到 40 的整數", output.getvalue())
+        self.assertIn("步數必須是 1 到 40", output.getvalue())
+
+    def test_select_rect_accepts_short_menu_row_and_reports_cancel_separately(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        with patch("cow_bot.cv2.namedWindow"), patch("cow_bot.cv2.resizeWindow"):
+            with patch("cow_bot.cv2.selectROI", return_value=(10, 10, 80, 8)):
+                with patch("cow_bot.cv2.destroyAllWindows"):
+                    self.assertEqual(select_rect(image, "menu", minimum=(24, 6)), [10, 10, 80, 8])
+            with patch("cow_bot.cv2.selectROI", return_value=(10, 10, 80, 8)):
+                with patch("cow_bot.cv2.destroyAllWindows"):
+                    with self.assertRaisesRegex(SafetyError, "minimum 24 x 16"):
+                        select_rect(image, "landmark")
+
+    def test_route_step_prompt_accepts_enter_or_finish_only(self):
+        output = io.StringIO()
+        with patch("builtins.input", side_effect=["skip", ""]), contextlib.redirect_stdout(output):
+            self.assertTrue(route_step_prompt("牛欄去銀行", 2, 30))
+        self.assertIn("請按 Enter 開始這一步", output.getvalue())
+        with patch("builtins.input", return_value="finish"):
+            self.assertFalse(route_step_prompt("銀行返回牛欄", 26, 30))
+
+    def test_finish_only_accepts_a_complete_round_trip_route(self):
+        incomplete = {"to_bank": [{"hover": "Bank Bank booth"}], "to_cows": []}
+        with self.assertRaisesRegex(SafetyError, "必須完成牛欄到銀行及銀行返回牛欄"):
+            validate_recorded_route(incomplete)
+        complete = {
+            "to_bank": [{"hover": "Bank Bank booth"}],
+            "to_cows": [{"hover": "Walk here"}],
+        }
+        validate_recorded_route(complete)
+
+    def test_finish_splits_combined_round_trip_after_bank_step(self):
+        outbound = [{"hover": "Walk here"}, {"hover": "Bank Bank booth"}]
+        return_trip = [{"hover": "Walk here"}, {"hover": "Climb-down Staircase"}]
+        data = {"to_bank": outbound + return_trip, "to_cows": []}
+
+        self.assertTrue(split_finished_round_trip(data))
+        self.assertEqual(data, {"to_bank": outbound, "to_cows": return_trip})
+        validate_recorded_route(data)
+
+    def test_finish_does_not_split_when_bank_is_missing_ambiguous_or_last(self):
+        for steps in (
+            [{"hover": "Walk here"}, {"hover": "Walk here"}],
+            [{"hover": "Bank Bank booth"}, {"hover": "Walk here"},
+             {"hover": "Bank Bank booth"}],
+            [{"hover": "Walk here"}, {"hover": "Bank Bank booth"}],
+        ):
+            data = {"to_bank": steps, "to_cows": []}
+            self.assertFalse(split_finished_round_trip(data))
+            self.assertEqual(data["to_cows"], [])
+
+    def test_save_route_landmarks_persists_both_step_signatures(self):
+        origin = np.full((12, 14, 3), 50, dtype=np.uint8)
+        arrival = np.full((10, 13, 3), 200, dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as directory:
+            origin_path = Path(directory) / "origin.png"
+            arrival_path = Path(directory) / "arrival.png"
+            save_route_landmarks(origin_path, origin, arrival_path, arrival)
+            np.testing.assert_array_equal(load_image(origin_path), origin)
+            np.testing.assert_array_equal(load_image(arrival_path), arrival)
+
+    def test_route_progress_resumes_same_output_and_preserves_steps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            route = root / "route.json"
+            assets = root / "route_assets"
+            assets.mkdir()
+            progress, resumed, reused_assets = load_route_progress(route, assets, [1920, 1080])
+            self.assertFalse(resumed)
+            self.assertTrue(reused_assets)
+            progress["counts"]["to_bank"] = 30
+            progress["data"]["to_bank"].append({"hover": "Walk here"})
+            save_route_progress(route_progress_path(route), progress)
+
+            restored, resumed, _ = load_route_progress(route, assets, [1920, 1080])
+
+            self.assertTrue(resumed)
+            self.assertEqual(restored["counts"]["to_bank"], 30)
+            self.assertEqual(restored["data"]["to_bank"], [{"hover": "Walk here"}])
+
+    def test_route_resume_displays_incomplete_and_previous_step_screenshots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            assets = Path(directory)
+            save_image(assets / "to_bank_01_before_screenshot.png", np.zeros((1080, 1920, 3), dtype=np.uint8))
+            save_image(assets / "to_bank_00_arrival_screenshot.png", np.zeros((1080, 1920, 3), dtype=np.uint8))
+            with patch("cow_bot.cv2.namedWindow") as window:
+                with patch("cow_bot.cv2.imshow"), patch("cow_bot.cv2.waitKey", return_value=0):
+                    with patch("cow_bot.cv2.destroyWindow"):
+                        show_route_resume_context(assets, "to_bank", 1)
+            self.assertEqual(window.call_count, 2)
+
+    def test_route_error_reports_saved_position_and_same_resume_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            route = Path(directory) / "route.json"
+            assets = Path(directory) / "route_assets"
+            assets.mkdir()
+            (assets / "to_bank_02_before_screenshot.png").write_bytes(b"saved image")
+            (assets / "to_bank_01_arrival_screenshot.png").write_bytes(b"previous image")
+            progress = {
+                "version": 1,
+                "data": {
+                    "screen": [1920, 1080],
+                    "to_bank": [{"hover": "Walk here"}, {"hover": "Walk here"}],
+                    "to_cows": [],
+                },
+                "counts": {"to_bank": 30},
+            }
+            save_route_progress(route_progress_path(route), progress)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                report_route_resume(route, ValueError("selection failed"))
+            self.assertIn("牛欄去銀行第 3/30 步；此前 2 步已保存", output.getvalue())
+            self.assertIn("to_bank_02_before_screenshot.png", output.getvalue())
+            self.assertIn(f'--output "{route}"', output.getvalue())
+
+    def test_arrival_timeout_defaults_and_reprompts(self):
+        with patch("builtins.input", return_value=""):
+            self.assertEqual(arrival_timeout("Walk here"), 15)
+            self.assertEqual(arrival_timeout("Climb-up Staircase"), 5)
+
+        output = io.StringIO()
+        with patch("builtins.input", side_effect=["(stairs: 5, walking: 50)", "50", "15"]), contextlib.redirect_stdout(output):
+            self.assertEqual(arrival_timeout("Walk here"), 15)
+        self.assertEqual(output.getvalue().count("請只輸入秒數"), 1)
+        self.assertEqual(output.getvalue().count("秒數必須介乎 1 至 45"), 1)
+
+    def test_preview_click_is_scaled_back_to_original_screenshot_coordinates(self):
+        self.assertEqual(
+            preview_point_to_image((640, 360), (1080, 1920, 3), (720, 1280, 3)),
+            (960, 540),
+        )
+        self.assertEqual(
+            preview_point_to_image((1279, 719), (1080, 1920, 3), (720, 1280, 3)),
+            (1919, 1079),
+        )
+
+    def test_route_destination_area_covers_client_but_excludes_windows_chrome(self):
+        self.assertTrue(point_inside_rect((0, 24), (0, 24, 1920, 1016)))
+        self.assertTrue(point_inside_rect((1919, 1039), (0, 24, 1920, 1016)))
+        self.assertFalse(point_inside_rect((500, 20), (0, 24, 1920, 1016)))
+        self.assertFalse(point_inside_rect((500, 1040), (0, 24, 1920, 1016)))
+
+    def test_bad_hover_text_reprompts_instead_of_aborting_route(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        output = io.StringIO()
+        with patch("builtins.input", side_effect=["Walk here", "Walk here / 1 more options"]):
+            with patch("cow_bot.learn_line", side_effect=[SafetyError("wrong glyph count"), None]):
+                with contextlib.redirect_stdout(output):
+                    action = route_hover_action({}, image, Path("route_assets/step.png"))
+        self.assertEqual(action, "Walk here")
+        self.assertIn("文字與截圖字形不符或不支援", output.getvalue())
+
+    def test_hover_action_ignores_optional_more_options_suffix(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        visible_line = "Bank Bank booth / 7 more options"
+        for index, _ in enumerate(visible_line.replace(" ", "")):
+            x = index * 3
+            image[32:36, x:x + 2] = 255
+
+        for label in ("Bank Bank booth", "Bank Bank booth / 4 more options",
+                      "Bank Bank booth / 27 more options"):
+            alphabet = {}
+            with patch("builtins.input", return_value=label):
+                action = route_hover_action(alphabet, image, Path("route_assets/step.png"))
+            self.assertEqual(action, "Bank Bank booth")
+            self.assertEqual(set(alphabet), set("Bankbooth"))
+
+    def test_learn_line_prefix_only_ignores_trailing_option_glyphs(self):
+        image = np.zeros((40, 500, 3), dtype=np.uint8)
+        for index, _ in enumerate("Bank Bank booth / 4 more options".replace(" ", "")):
+            x = index * 3
+            image[32:36, x:x + 2] = 255
+        alphabet = {}
+        learn_line(alphabet, image, "Bank Bank booth", prefix_only=True)
+        self.assertEqual(set(alphabet), set("Bankbooth"))
+
+    def test_stair_action_uses_menu_row_when_hover_text_is_unavailable(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        with patch("builtins.input", return_value="Bottom-floor Staircase"):
+            with patch("cow_bot.route_stair_action", return_value="route_assets/step_menu.png") as record:
+                action, menu = route_action(
+                    {}, image, Path("C:/profile/route_assets/step.png"),
+                    Path("C:/profile/route_assets/step_menu.png"),
+                )
+        self.assertEqual((action, menu), ("Climb-down Staircase", "route_assets/step_menu.png"))
+        record.assert_called_once()
+        self.assertEqual(record.call_args.args[3], "Climb-down Staircase")
+
+    def test_stair_menu_template_rejects_both_rows_then_accepts_target_row(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        cv2.putText(image, "Climb-down Staircase", (80, 200),
+                    cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1, cv2.LINE_8)
+        cv2.putText(image, "Bottom-floor Staircase", (80, 218),
+                    cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1, cv2.LINE_8)
+        with tempfile.TemporaryDirectory() as directory:
+            screenshot = Path(directory) / "route_assets" / "before.png"
+            asset = Path(directory) / "route_assets" / "menu.png"
+            output = io.StringIO()
+            with patch(
+                "cow_bot.select_rect",
+                side_effect=[[70, 185, 250, 40], [70, 202, 250, 16]],
+            ) as select:
+                with contextlib.redirect_stdout(output):
+                    path = route_stair_action(image, screenshot, asset, "Climb-down Staircase")
+            template = load_image(asset)
+            self.assertEqual(path, str(Path("route_assets") / "menu.png"))
+            self.assertEqual(select.call_count, 2)
+            self.assertIn("不要把兩列一起框", output.getvalue())
+            self.assertGreater(np.count_nonzero(text_mask(template)), 0)
+
+    def test_menu_template_match_requires_one_exact_option(self):
+        template = np.zeros((8, 16, 3), dtype=np.uint8)
+        template[1:7, 2:14] = 255
+        image = np.zeros((100, 100, 3), dtype=np.uint8)
+        image[30:38, 40:56] = template
+        self.assertEqual(menu_template_location(image, template, (0, 0, 100, 100)), (40, 30, 16, 8))
+        image[60:68, 40:56] = template
+        self.assertIsNone(menu_template_location(image, template, (0, 0, 100, 100)))
 
 
 class ForegroundWindowTests(unittest.TestCase):
@@ -222,11 +454,22 @@ class VisionTests(unittest.TestCase):
         unknown[998:1028, 1558:1578] = 0
         self.assertFalse(self.vision.inventory_tab_visible(unknown))
 
+    def test_inventory_detection_tracks_bounded_vertical_offset(self):
+        image = self.image("before_take_cowhide")
+        shifted = image.copy()
+        shifted[8:] = image[:-8]
+
+        self.assertEqual(self.vision.inventory_panel_offset(shifted), 8)
+        self.assertEqual(self.vision.inventory_tab_offset(shifted), 8)
+        self.assertTrue(self.vision.inventory_panel_visible(shifted))
+        self.assertTrue(self.vision.inventory_tab_visible(shifted))
+        self.assertEqual(self.vision.inventory(shifted), self.vision.inventory(image))
+
     def test_reopen_inventory_requires_verified_icon_and_two_readings(self):
         desktop = object.__new__(Desktop)
         vision = Mock()
         vision.inventory_panel_visible.side_effect = [False, False, False, False, True, True]
-        vision.inventory_tab_visible.return_value = True
+        vision.inventory_tab_offset.return_value = 8
         contents = inventory(2)
         vision.inventory.return_value = contents
         desktop.vision = vision
@@ -242,16 +485,16 @@ class VisionTests(unittest.TestCase):
             reopened = desktop.reopen_inventory_tab()
 
         self.assertEqual(reopened.number, 6)
-        desktop.move.assert_called_once_with((1568, 1013))
+        desktop.move.assert_called_once_with((1568, 1021))
         desktop.mouse.click.assert_called_once_with()
-        self.assertEqual(vision.inventory_tab_visible.call_count, 4)
+        self.assertEqual(vision.inventory_tab_offset.call_count, 4)
         self.assertEqual(vision.inventory.call_count, 2)
 
     def test_reopen_inventory_does_not_click_if_panel_appears_while_aiming(self):
         desktop = object.__new__(Desktop)
         desktop.vision = Mock()
         desktop.vision.inventory_panel_visible.side_effect = [False, True]
-        desktop.vision.inventory_tab_visible.return_value = True
+        desktop.vision.inventory_tab_offset.return_value = 8
         desktop.fresh = Mock(side_effect=[
             Frame(1, .1, np.zeros((1080, 1920, 3), dtype=np.uint8)),
             Frame(2, .2, np.zeros((1080, 1920, 3), dtype=np.uint8)),
@@ -268,7 +511,7 @@ class VisionTests(unittest.TestCase):
         desktop = object.__new__(Desktop)
         desktop.vision = Mock()
         desktop.vision.inventory_panel_visible.return_value = False
-        desktop.vision.inventory_tab_visible.return_value = False
+        desktop.vision.inventory_tab_offset.return_value = None
         desktop.fresh = Mock(return_value=Frame(
             1, .1, np.zeros((1080, 1920, 3), dtype=np.uint8),
         ))

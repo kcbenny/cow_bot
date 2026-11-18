@@ -1,0 +1,408 @@
+{
+  "screen": [
+    1920,
+    1080
+  ],
+  "to_bank": [
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_00_origin.png",
+      "arrival": "route_v17_assets\\to_bank_00_arrival.png",
+      "arrival_roi": [
+        675,
+        591,
+        235,
+        59
+      ],
+      "offset": [
+        -273,
+        53
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Open Gate",
+      "origin": "route_v17_assets\\to_bank_01_origin.png",
+      "arrival": "route_v17_assets\\to_bank_01_arrival.png",
+      "arrival_roi": [
+        720,
+        573,
+        207,
+        97
+      ],
+      "offset": [
+        185,
+        -3
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_02_origin.png",
+      "arrival": "route_v17_assets\\to_bank_02_arrival.png",
+      "arrival_roi": [
+        578,
+        450,
+        331,
+        212
+      ],
+      "offset": [
+        399,
+        168
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_03_origin.png",
+      "arrival": "route_v17_assets\\to_bank_03_arrival.png",
+      "arrival_roi": [
+        714,
+        573,
+        128,
+        96
+      ],
+      "offset": [
+        98,
+        118
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_04_origin.png",
+      "arrival": "route_v17_assets\\to_bank_04_arrival.png",
+      "arrival_roi": [
+        890,
+        573,
+        121,
+        169
+      ],
+      "offset": [
+        293,
+        383
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_05_origin.png",
+      "arrival": "route_v17_assets\\to_bank_05_arrival.png",
+      "arrival_roi": [
+        718,
+        428,
+        166,
+        112
+      ],
+      "offset": [
+        -65,
+        178
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_06_origin.png",
+      "arrival": "route_v17_assets\\to_bank_06_arrival.png",
+      "arrival_roi": [
+        686,
+        524,
+        188,
+        120
+      ],
+      "offset": [
+        -30,
+        407
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_07_origin.png",
+      "arrival": "route_v17_assets\\to_bank_07_arrival.png",
+      "arrival_roi": [
+        717,
+        572,
+        111,
+        142
+      ],
+      "offset": [
+        -237,
+        178
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Climb-up Staircase",
+      "origin": "route_v17_assets\\to_bank_08_origin.png",
+      "arrival": "route_v17_assets\\to_bank_08_arrival.png",
+      "arrival_roi": [
+        980,
+        348,
+        232,
+        152
+      ],
+      "offset": [
+        80,
+        89
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 5.0,
+      "menu_action": "route_v17_assets\\to_bank_08_menu_action.png"
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_09_origin.png",
+      "arrival": "route_v17_assets\\to_bank_09_arrival.png",
+      "arrival_roi": [
+        876,
+        406,
+        177,
+        80
+      ],
+      "offset": [
+        59,
+        47
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Bank Bank booth",
+      "origin": "route_v17_assets\\to_bank_10_origin.png",
+      "arrival": "route_v17_assets\\to_bank_10_arrival.png",
+      "arrival_roi": [
+        591,
+        54,
+        486,
+        72
+      ],
+      "offset": [
+        56,
+        61
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    }
+  ],
+  "to_cows": [
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_11_origin.png",
+      "arrival": "route_v17_assets\\to_bank_11_arrival.png",
+      "arrival_roi": [
+        873,
+        556,
+        123,
+        113
+      ],
+      "offset": [
+        -109,
+        229
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Climb-down Staircase",
+      "origin": "route_v17_assets\\to_bank_12_origin.png",
+      "arrival": "route_v17_assets\\to_bank_12_arrival.png",
+      "arrival_roi": [
+        832,
+        448,
+        102,
+        150
+      ],
+      "offset": [
+        89,
+        51
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 5.0,
+      "menu_action": "route_v17_assets\\to_bank_12_menu_action.png"
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_13_origin.png",
+      "arrival": "route_v17_assets\\to_bank_13_arrival.png",
+      "arrival_roi": [
+        969,
+        486,
+        153,
+        236
+      ],
+      "offset": [
+        722,
+        -51
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_14_origin.png",
+      "arrival": "route_v17_assets\\to_bank_14_arrival.png",
+      "arrival_roi": [
+        486,
+        327,
+        346,
+        241
+      ],
+      "offset": [
+        159,
+        -32
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_15_origin.png",
+      "arrival": "route_v17_assets\\to_bank_15_arrival.png",
+      "arrival_roi": [
+        732,
+        560,
+        310,
+        121
+      ],
+      "offset": [
+        116,
+        76
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Open Gate",
+      "origin": "route_v17_assets\\to_bank_16_origin.png",
+      "arrival": "route_v17_assets\\to_bank_16_arrival.png",
+      "arrival_roi": [
+        762,
+        542,
+        212,
+        115
+      ],
+      "offset": [
+        222,
+        -32
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_17_origin.png",
+      "arrival": "route_v17_assets\\to_bank_17_arrival.png",
+      "arrival_roi": [
+        994,
+        724,
+        128,
+        125
+      ],
+      "offset": [
+        101,
+        59
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0
+    }
+  ]
+}

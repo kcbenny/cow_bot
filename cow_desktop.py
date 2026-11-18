@@ -27,6 +27,24 @@ CAPTURE_INTERVAL_SECONDS = 0.05
 MENU_RENDER_TIMEOUT_SECONDS = 1.0
 
 
+def menu_template_location(
+    image: np.ndarray, template: np.ndarray, rect: tuple[int, int, int, int],
+) -> tuple[int, int, int, int] | None:
+    template_mask = text_mask(template).astype(np.uint8) * 255
+    region = text_mask(crop(image, rect)).astype(np.uint8) * 255
+    if template_mask.size == 0 or template_mask.shape[0] > region.shape[0] or template_mask.shape[1] > region.shape[1]:
+        return None
+    scores = cv2.matchTemplate(region, template_mask, cv2.TM_SQDIFF_NORMED)
+    points = np.argwhere(scores <= 0.00001)
+    if len(points) != 1:
+        return None
+    row, col = points[0]
+    return (
+        rect[0] + int(col), rect[1] + int(row),
+        template_mask.shape[1], template_mask.shape[0],
+    )
+
+
 def foreground_window_problem(title: str, minimized: bool) -> str | None:
     problems = []
     if title != "Old School RuneScape":
@@ -223,25 +241,65 @@ class Desktop:
         self._input_check()
         self.mouse.press(key)
 
+    def route_menu_click(
+        self, point: tuple[int, int], template: np.ndarray,
+        landmark: tuple[tuple[int, int, int, int], np.ndarray],
+    ) -> bool:
+        self.move(point)
+        frame = self.fresh()
+        if not similar(crop(frame.image, landmark[0]), landmark[1], 6):
+            return False
+        self._input_check()
+        self.mouse.click(button="right")
+
+        width, height = self.vision.settings["screen"]
+        x, y = point
+        left, top = max(0, x - 280), max(24, y - 280)
+        right, bottom = min(width, x + 280), min(height - 48, y + 280)
+        rect = (left, top, right - left, bottom - top)
+        deadline = time.monotonic() + MENU_RENDER_TIMEOUT_SECONDS
+        row_rect = None
+        while time.monotonic() < deadline:
+            frame = self.fresh()
+            row_rect = menu_template_location(frame.image, template, rect)
+            if row_rect is not None:
+                break
+        if row_rect is None:
+            return False
+
+        destination = (row_rect[0] + row_rect[2] // 2, row_rect[1] + row_rect[3] + 3)
+        self.move(destination)
+        expected = text_mask(template)
+        for _ in range(2):
+            if not np.array_equal(text_mask(crop(self.fresh().image, row_rect)), expected):
+                return False
+        self._input_check()
+        if not np.array_equal(text_mask(crop(self.snapshot(), row_rect)), expected):
+            return False
+        self._input_check()
+        self.mouse.click()
+        return True
+
     def reopen_inventory_tab(self) -> Frame | None:
         frame = self.fresh()
         if self.vision.inventory_panel_visible(frame.image):
             return None
-        if not self.vision.inventory_tab_visible(frame.image):
+        offset = self.vision.inventory_tab_offset(frame.image)
+        if offset is None:
             raise SafetyError("Inventory hidden and backpack tab could not be verified")
 
-        self.move(INVENTORY_TAB_POINT)
+        self.move((INVENTORY_TAB_POINT[0], INVENTORY_TAB_POINT[1] + offset))
         for _ in range(2):
             frame = self.fresh()
             if self.vision.inventory_panel_visible(frame.image):
                 return frame
-            if not self.vision.inventory_tab_visible(frame.image):
+            if self.vision.inventory_tab_offset(frame.image) != offset:
                 raise SafetyError("Backpack tab changed before reopen click")
 
         final = self.snapshot()
         if self.vision.inventory_panel_visible(final):
             return self.fresh()
-        if not self.vision.inventory_tab_visible(final):
+        if self.vision.inventory_tab_offset(final) != offset:
             raise SafetyError("Backpack tab failed its final visual guard")
 
         self._input_check()
@@ -380,6 +438,10 @@ class Route:
                     raise SafetyError("Invalid route timeout or action")
                 for key in ("origin", "arrival"):
                     load_image(path.parent / step[key])
+                if step["hover"] in ("Climb-up Staircase", "Climb-down Staircase"):
+                    if not step.get("menu_action"):
+                        raise SafetyError("Stair route step is missing its verified menu-action template")
+                    load_image(path.parent / step["menu_action"])
         self.vision = vision
 
     def run(self, direction: str, desktop: Desktop, audit: Audit) -> None:
@@ -400,7 +462,14 @@ class Route:
             if locate(check.image, origin, step["search"]) != anchor:
                 raise SafetyError("Route anchor moved during verification")
             origin_rect = (anchor[0], anchor[1], origin.shape[1], origin.shape[0])
-            if not desktop.guarded_click(point, step["hover"], landmark=(origin_rect, origin)):
+            if step.get("menu_action"):
+                template = load_image(self.path.parent / step["menu_action"])
+                clicked = desktop.route_menu_click(point, template, (origin_rect, origin))
+            else:
+                clicked = desktop.guarded_click(
+                    point, step["hover"], landmark=(origin_rect, origin),
+                )
+            if not clicked:
                 raise SafetyError(f"Route action rejected: {step['hover']}")
             audit.event("ROUTE_CLICK", check, direction=direction, step=index, action=step["hover"])
             deadline = time.monotonic() + step["timeout"]

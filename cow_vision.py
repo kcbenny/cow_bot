@@ -13,9 +13,12 @@ ROOT = Path(__file__).resolve().parent
 PROFILE = ROOT / "cow_profile"
 HOVER = (0, 29, 500, 11)
 WORLD = (520, 110, 1120, 750)
+ROUTE_CLICK_AREA = (0, 24, 1920, 1016)
+ROUTE_ANCHOR_SEARCH = (0, 40, 1676, 830)
 PANEL = (1676, 722, 200, 6)
 INVENTORY_TAB = (1558, 998, 20, 30)
 INVENTORY_TAB_POINT = (1568, 1013)
+INVENTORY_VERTICAL_OFFSETS = range(-12, 13)
 CHAT = (0, 870, 520, 130)
 CENTERS = [(1713 + col * 42, 752 + row * 36) for row in range(7) for col in range(4)]
 COWHIDE_HSV_LOWER = np.asarray([0, 0, 160], dtype=np.uint8)
@@ -54,13 +57,15 @@ def runs(mask: np.ndarray) -> list[np.ndarray]:
     return list(np.split(columns, np.where(np.diff(columns) > 1)[0] + 1))
 
 
-def learn_line(alphabet: dict[str, list], image: np.ndarray, label: str) -> None:
+def learn_line(
+    alphabet: dict[str, list], image: np.ndarray, label: str, *, prefix_only: bool = False,
+) -> None:
     mask = text_mask(crop(image, HOVER))
     columns = runs(mask)
     letters = label.replace(" ", "")
-    if len(columns) != len(letters):
+    if len(columns) < len(letters) or (not prefix_only and len(columns) != len(letters)):
         raise SafetyError(f"Cannot learn native font from {label!r}")
-    for character, cols in zip(letters, columns):
+    for character, cols in zip(letters, columns[:len(letters)]):
         glyph = mask[:, cols[0]:cols[-1] + 1].astype(int).tolist()
         variants = alphabet.setdefault(character, [])
         if glyph not in variants:
@@ -307,10 +312,12 @@ class Vision:
         return False
 
     def inventory(self, image: np.ndarray) -> Inventory:
-        if not self.inventory_panel_visible(image):
+        offset = self.inventory_panel_offset(image)
+        if offset is None:
             raise InventoryPanelUnavailable("Inventory panel is hidden, obstructed, or changed")
         slots = []
         for i, (x, y) in enumerate(CENTERS):
+            y += offset
             cell = crop(image, (x - 16, y - 16, 32, 32))
             if similar(cell, self.empty_slots[i]):
                 slots.append("EMPTY")
@@ -324,21 +331,44 @@ class Vision:
             slots.append(matches[0] if len(matches) == 1 else "UNKNOWN")
         return Inventory(tuple(slots))
 
+    def inventory_panel_offset(self, image: np.ndarray) -> int | None:
+        x, y, width, height = PANEL
+        matches = [
+            offset
+            for offset in INVENTORY_VERTICAL_OFFSETS
+            if similar(
+                crop(image, (x, y + offset, width, height)),
+                self.panel,
+            )
+        ]
+        return matches[0] if len(matches) == 1 else None
+
     def inventory_panel_visible(self, image: np.ndarray) -> bool:
-        return similar(crop(image, PANEL), self.panel)
+        return self.inventory_panel_offset(image) is not None
+
+    def inventory_tab_offset(self, image: np.ndarray) -> int | None:
+        x, y, width, height = INVENTORY_TAB
+        templates = [
+            cv2.cvtColor(template, cv2.COLOR_RGB2GRAY)
+            for template in self.inventory_tab_templates
+        ]
+        scores = []
+        for offset in INVENTORY_VERTICAL_OFFSETS:
+            actual = cv2.cvtColor(
+                crop(image, (x, y + offset, width, height)),
+                cv2.COLOR_RGB2GRAY,
+            )
+            scores.append(max(
+                float(cv2.matchTemplate(actual, template, cv2.TM_CCOEFF_NORMED).max())
+                for template in templates
+            ))
+        ranked = sorted(scores, reverse=True)
+        if ranked[0] < 0.82 or ranked[0] - ranked[1] < 0.1:
+            return None
+        return list(INVENTORY_VERTICAL_OFFSETS)[scores.index(ranked[0])]
 
     def inventory_tab_visible(self, image: np.ndarray) -> bool:
-        actual = crop(image, INVENTORY_TAB)
-        actual_gray = cv2.cvtColor(actual, cv2.COLOR_RGB2GRAY)
-        best_score = max(
-            float(cv2.matchTemplate(
-                actual_gray,
-                cv2.cvtColor(template, cv2.COLOR_RGB2GRAY),
-                cv2.TM_CCOEFF_NORMED,
-            ).max())
-            for template in self.inventory_tab_templates
-        )
-        return best_score >= 0.82
+        return self.inventory_tab_offset(image) is not None
 
     def bank_open(self, image: np.ndarray) -> bool:
         return similar(crop(image, (760, 51, 158, 22)), self.bank_header, 6)
