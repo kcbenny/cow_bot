@@ -1,0 +1,9 @@
+{"event": 1, "at": 1795195753.0883696, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1795195753.4884748, "state": "WALK_TO_BANK", "screenshot": "00002_WALK_TO_BANK.png"}
+{"event": 3, "at": 1795195754.3164153, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 0, "point": [725, 590], "screenshot": "00003_ROUTE_SCENE_REALIGNED.png"}
+{"event": 4, "at": 1795195754.5925004, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 0, "action": "Walk here", "screenshot": "00004_ROUTE_CLICK.png"}
+{"event": 5, "at": 1795195756.7796025, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 0, "screenshot": "00005_ROUTE_ARRIVED.png"}
+{"event": 6, "at": 1795195757.7112195, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 1, "point": [910, 552], "screenshot": "00006_ROUTE_SCENE_REALIGNED.png"}
+{"event": 7, "at": 1795195758.0960343, "state": "ROUTE_GATE_ALREADY_OPEN", "direction": "to_bank", "step": 1, "screenshot": "00007_ROUTE_GATE_ALREADY_OPEN.png"}
+{"event": 8, "at": 1795195758.9771729, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 2, "point": [707, 851], "screenshot": "00008_ROUTE_SCENE_REALIGNED.png"}
+{"event": 9, "at": 1795195759.9467084, "state": "SAFE_STOP", "reason": "Route action rejected: Walk here", "screenshot": "00009_SAFE_STOP.png"}

@@ -11,7 +11,7 @@ from cow_core import Health, Inventory, InventoryPanelUnavailable, SafetyError
 
 ROOT = Path(__file__).resolve().parent
 PROFILE = ROOT / "cow_profile"
-HOVER = (0, 29, 500, 11)
+HOVER = (0, 29, 300, 11)
 WORLD = (520, 110, 1120, 750)
 ROUTE_CLICK_AREA = (0, 24, 1920, 1016)
 ROUTE_ANCHOR_SEARCH = (0, 40, 1676, 830)
@@ -57,6 +57,31 @@ def runs(mask: np.ndarray) -> list[np.ndarray]:
     return list(np.split(columns, np.where(np.diff(columns) > 1)[0] + 1))
 
 
+def decode_hover_line(font: dict, image: np.ndarray) -> str:
+    mask = text_mask(crop(image, HOVER))
+    result = ""
+    previous = None
+    for columns in runs(mask):
+        glyph = mask[:, columns[0]:columns[-1] + 1]
+        matches = {
+            char for char, variants in font.items()
+            if any(
+                glyph.shape == np.asarray(variant).shape
+                and np.array_equal(glyph, variant)
+                for variant in variants
+            )
+        }
+        if len(matches) != 1:
+            return ""
+        if matches == {"/"}:
+            break
+        if previous is not None and columns[0] - previous > 4:
+            result += " "
+        result += matches.pop()
+        previous = columns[-1]
+    return result.split(" / ")[0].strip()
+
+
 def learn_line(
     alphabet: dict[str, list], image: np.ndarray, label: str, *, prefix_only: bool = False,
 ) -> None:
@@ -65,8 +90,26 @@ def learn_line(
     letters = label.replace(" ", "")
     if len(columns) < len(letters) or (not prefix_only and len(columns) != len(letters)):
         raise SafetyError(f"Cannot learn native font from {label!r}")
+    known_glyphs: dict[tuple[tuple[int, ...], ...], set[str]] = {}
+    for known_character, variants in alphabet.items():
+        for variant in variants:
+            key = tuple(tuple(int(pixel) for pixel in row) for row in variant)
+            known_glyphs.setdefault(key, set()).add(known_character)
+    learned_glyphs: dict[tuple[tuple[int, ...], ...], str] = {}
+    additions = []
     for character, cols in zip(letters, columns[:len(letters)]):
         glyph = mask[:, cols[0]:cols[-1] + 1].astype(int).tolist()
+        key = tuple(tuple(row) for row in glyph)
+        conflicts = known_glyphs.get(key, set()) - {character}
+        pending_conflict = learned_glyphs.get(key)
+        if conflicts or (pending_conflict is not None and pending_conflict != character):
+            conflict = sorted(conflicts | ({pending_conflict} if pending_conflict else set()))
+            raise SafetyError(
+                f"Glyph for {character!r} is ambiguous with {', '.join(conflict)}",
+            )
+        learned_glyphs[key] = character
+        additions.append((character, glyph))
+    for character, glyph in additions:
         variants = alphabet.setdefault(character, [])
         if glyph not in variants:
             variants.append(glyph)
@@ -186,24 +229,7 @@ class Vision:
         return text_mask(crop(image, HOVER))
 
     def hover(self, image: np.ndarray) -> str:
-        mask = self.hover_mask(image)
-        result = ""
-        previous = None
-        for columns in runs(mask):
-            glyph = mask[:, columns[0]:columns[-1] + 1]
-            matches = {
-                char for char, variants in self.font.items()
-                if any(glyph.shape == v.shape and np.array_equal(glyph, v) for v in variants)
-            }
-            if len(matches) != 1:
-                return ""
-            if matches == {"/"}:
-                break
-            if previous is not None and columns[0] - previous > 4:
-                result += " "
-            result += matches.pop()
-            previous = columns[-1]
-        return result.split(" / ")[0].strip()
+        return decode_hover_line(self.font, image)
 
     def health(self, image: np.ndarray, *, compressed: bool = False) -> Health | None:
         threshold = 150 if compressed else 180

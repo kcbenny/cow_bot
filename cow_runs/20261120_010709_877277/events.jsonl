@@ -1,0 +1,7 @@
+{"event": 1, "at": 1795108035.3552628, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1795108035.6881871, "state": "WALK_TO_BANK", "screenshot": "00002_WALK_TO_BANK.png"}
+{"event": 3, "at": 1795108036.2653482, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 0, "point": [791, 626], "screenshot": "00003_ROUTE_SCENE_REALIGNED.png"}
+{"event": 4, "at": 1795108036.5404134, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 0, "action": "Walk here", "screenshot": "00004_ROUTE_CLICK.png"}
+{"event": 5, "at": 1795108039.4253128, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 0, "screenshot": "00005_ROUTE_ARRIVED.png"}
+{"event": 6, "at": 1795108040.040509, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 1, "point": [910, 534], "screenshot": "00006_ROUTE_SCENE_REALIGNED.png"}
+{"event": 7, "at": 1795108040.2609758, "state": "SAFE_STOP", "reason": "Route action rejected: Open Gate", "screenshot": "00007_SAFE_STOP.png"}

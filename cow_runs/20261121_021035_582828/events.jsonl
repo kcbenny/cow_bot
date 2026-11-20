@@ -1,0 +1,4 @@
+{"event": 1, "at": 1795198241.034488, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1795198241.4020128, "state": "WALK_TO_BANK", "screenshot": "00002_WALK_TO_BANK.png"}
+{"event": 3, "at": 1795198242.2297602, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 0, "point": [700, 624], "screenshot": "00003_ROUTE_SCENE_REALIGNED.png"}
+{"event": 4, "at": 1795198245.3047283, "state": "SAFE_STOP", "reason": "Route action rejected: Walk here", "screenshot": "00004_SAFE_STOP.png"}

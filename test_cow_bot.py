@@ -14,8 +14,11 @@ import numpy as np
 from cow_bot import (
     arrival_timeout, countdown, main, point_inside_rect, preview_point_to_image, replay,
     load_route_progress, report_route_resume, route_action, route_hover_action, route_progress_path,
-    route_step_count, route_step_prompt, route_stair_action, save_route_progress, select_rect,
-    save_route_landmarks, split_finished_round_trip,
+    route_recalibration_target_area, route_step_count, route_step_prompt, route_stair_action,
+    save_route_progress, select_rect,
+    save_route_landmarks, split_finished_round_trip, recalibrate_route_step,
+    learn_route_hover_action,
+    verify_route_step_start, verify_route_step_arrival,
     show_route_resume_context, validate_recorded_route,
 )
 from cow_core import (
@@ -23,8 +26,13 @@ from cow_core import (
 )
 from cow_desktop import (
     Bot, Desktop, Frame, Route, foreground_window_problem, locate, menu_template_location,
+    project_route_point, registered_route_arrival, route_scene_homography,
+    route_reference_search, route_target_search, stable_route_target,
 )
-from cow_vision import ROOT, Vision, bootstrap, crop, learn_line, load_image, save_image, text_mask
+from cow_vision import (
+    PROFILE, ROOT, Vision, bootstrap, crop, decode_hover_line, learn_line, load_image,
+    save_image, text_mask,
+)
 
 
 def inventory(hides=0, bones=0, other=0):
@@ -32,6 +40,26 @@ def inventory(hides=0, bones=0, other=0):
         ["Cowhide"] * hides + ["Bones"] * bones + ["UNKNOWN"] * other
         + ["EMPTY"] * (28 - hides - bones - other)
     ))
+
+
+def hover_image(text, shape=(1080, 1920, 3)):
+    image = np.zeros(shape, dtype=np.uint8)
+    x = 8
+    for character in text:
+        if character == " ":
+            x += 5
+            continue
+        glyph = np.zeros((6, 5), dtype=np.uint8)
+        glyph[0, :] = 255
+        glyph[5, :] = 255
+        code = ord(character)
+        for row in range(4):
+            for column in range(3):
+                if code & (1 << (row * 3 + column)):
+                    glyph[row + 1, column + 1] = 255
+        image[31:37, x:x + 5] = glyph[:, :, None]
+        x += 7
+    return image
 
 
 class CountdownTests(unittest.TestCase):
@@ -60,6 +88,18 @@ class CountdownTests(unittest.TestCase):
             self.assertEqual(route_step_count("牛欄去銀行"), 3)
         self.assertIn("請只輸入 1 到 40 的整數", output.getvalue())
         self.assertIn("步數必須是 1 到 40", output.getvalue())
+
+    def test_step_four_recalibration_uses_the_annotated_safe_area(self):
+        self.assertEqual(
+            route_recalibration_target_area("to_bank", 4, (1080, 1920, 3)),
+            (820, 740, 370, 180),
+        )
+        self.assertEqual(
+            route_recalibration_target_area("to_bank", 3, (1080, 1920, 3)),
+            (0, 24, 1920, 896),
+        )
+        with self.assertRaisesRegex(SafetyError, "outside the safe screen"):
+            route_recalibration_target_area("to_bank", 4, (900, 1920, 3))
 
     def test_select_rect_accepts_short_menu_row_and_reports_cancel_separately(self):
         image = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -201,6 +241,19 @@ class CountdownTests(unittest.TestCase):
         self.assertFalse(point_inside_rect((500, 20), (0, 24, 1920, 1016)))
         self.assertFalse(point_inside_rect((500, 1040), (0, 24, 1920, 1016)))
 
+    def test_recalibrate_route_cli_dispatches_one_based_step(self):
+        argv = [
+            "cow_bot.py", "recalibrate-route", "--route", "cow_profile\\route_v17.json",
+            "--direction", "to_bank", "--step", "4",
+        ]
+        vision = Mock()
+        with patch("sys.argv", argv), patch("cow_bot.Vision", return_value=vision):
+            with patch("cow_bot.recalibrate_route_step") as recalibrate:
+                main()
+        recalibrate.assert_called_once_with(
+            Path("cow_profile\\route_v17.json"), "to_bank", 4,
+        )
+
     def test_bad_hover_text_reprompts_instead_of_aborting_route(self):
         image = np.zeros((1080, 1920, 3), dtype=np.uint8)
         output = io.StringIO()
@@ -211,12 +264,45 @@ class CountdownTests(unittest.TestCase):
         self.assertEqual(action, "Walk here")
         self.assertIn("文字與截圖字形不符或不支援", output.getvalue())
 
+    def test_route_hover_learning_rejects_action_that_disagrees_with_screenshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory)
+            bootstrap(profile)
+            alphabet = json.loads((profile / "font.json").read_text(encoding="utf-8"))
+            original = json.loads(json.dumps(alphabet))
+            image = load_image(ROOT / "images" / "after_take_cowhide.png")
+
+            with self.assertRaisesRegex(ValueError, "Screenshot hover is 'Walk here'"):
+                learn_route_hover_action(
+                    alphabet, image, Path("route_assets/step.png"), "Open Gate",
+                )
+
+            self.assertEqual(alphabet, original)
+
+    def test_gate_recalibration_screenshot_keeps_its_actual_hover_label(self):
+        alphabet = json.loads((PROFILE / "font.json").read_text(encoding="utf-8"))
+        image = load_image(
+            PROFILE / "route_v17_assets" / "to_bank_01_recal_20261121_010157_329447"
+            / "to_bank_01_recal_20261121_010157_329447_before_screenshot.png",
+        )
+        self.assertEqual(decode_hover_line(alphabet, image), "Walk here")
+
+    def test_learn_line_rejects_ambiguous_glyphs_without_partial_updates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory)
+            bootstrap(profile)
+            alphabet = json.loads((profile / "font.json").read_text(encoding="utf-8"))
+            original = json.loads(json.dumps(alphabet))
+            image = load_image(ROOT / "images" / "after_take_cowhide.png")
+
+            with self.assertRaisesRegex(SafetyError, "Glyph for 'O' is ambiguous"):
+                learn_line(alphabet, image, "Open Gate", prefix_only=True)
+
+            self.assertEqual(alphabet, original)
+
     def test_hover_action_ignores_optional_more_options_suffix(self):
-        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
         visible_line = "Bank Bank booth / 7 more options"
-        for index, _ in enumerate(visible_line.replace(" ", "")):
-            x = index * 3
-            image[32:36, x:x + 2] = 255
+        image = hover_image(visible_line)
 
         for label in ("Bank Bank booth", "Bank Bank booth / 4 more options",
                       "Bank Bank booth / 27 more options"):
@@ -227,10 +313,7 @@ class CountdownTests(unittest.TestCase):
             self.assertEqual(set(alphabet), set("Bankbooth"))
 
     def test_learn_line_prefix_only_ignores_trailing_option_glyphs(self):
-        image = np.zeros((40, 500, 3), dtype=np.uint8)
-        for index, _ in enumerate("Bank Bank booth / 4 more options".replace(" ", "")):
-            x = index * 3
-            image[32:36, x:x + 2] = 255
+        image = hover_image("Bank Bank booth / 4 more options", (40, 500, 3))
         alphabet = {}
         learn_line(alphabet, image, "Bank Bank booth", prefix_only=True)
         self.assertEqual(set(alphabet), set("Bankbooth"))
@@ -400,6 +483,11 @@ class VisionTests(unittest.TestCase):
         for name, action in expected.items():
             with self.subTest(name=name):
                 self.assertEqual(self.vision.hover(self.image(name)), action)
+
+    def test_hover_ignores_bright_pixels_outside_the_action_text(self):
+        image = self.image("attack_cow").copy()
+        image[35, 366] = [255, 255, 255]
+        self.assertEqual(self.vision.hover(image), "Attack Cow (level-2)")
 
     def test_real_hud_and_idle_discrimination(self):
         self.assertEqual(self.vision.health(self.image("attacking_cow")), Health("Cow", True))
@@ -748,6 +836,7 @@ class VisionTests(unittest.TestCase):
             Frame(3, .3, image),
             Frame(4, .4, image),
             Frame(5, .5, image),
+            Frame(6, .6, image),
         ]
         desktop.pick_menu.return_value = "Cowhide"
         bot = Bot(desktop, Mode.COWHIDE_ONLY, None, audit)
@@ -845,6 +934,7 @@ class VisionTests(unittest.TestCase):
         desktop.pick_menu.assert_called_once_with(
             (942, 504), "Take Cowhide", ("Cowhide",),
         )
+        vision.loot_grid.assert_not_called()
         finish_call = next(
             call for call in audit.event.call_args_list
             if call.args and call.args[0] == "LOOT_SEARCH_FINISHED"
@@ -877,32 +967,34 @@ class VisionTests(unittest.TestCase):
         self.assertEqual(metrics["hover_matches"], 0)
         self.assertEqual(metrics["ignored_item_matches"], 1)
 
-    def test_both_mode_spiral_fallback_does_not_pick_cowhide(self):
-        vision = Mock()
-        vision.settings = {"loot_radius": 130}
-        vision.loot_candidates.return_value = []
-        vision.loot_grid.return_value = iter([((1036, 554), "fine")])
-        vision.hover.return_value = "Take Cowhide"
+    def test_search_continues_after_five_consecutive_failed_attacks(self):
         desktop, audit = Mock(), Mock()
-        desktop.vision = vision
-        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        desktop.fresh.side_effect = [
-            Frame(1, .1, image),
-            Frame(2, .2, image),
-            Frame(3, .3, image),
-            Frame(4, 25.1, image),
-        ]
-        bot = Bot(desktop, Mode.COWHIDE_AND_BONES, None, audit)
-        bot.last_kill_point = (1036, 554)
-        with patch("cow_desktop.stable_inventory", return_value=inventory()):
-            with patch("cow_desktop.time.monotonic", return_value=0):
-                bot.loot()
+        desktop.vision = self.vision
+        desktop.fresh.return_value = Frame(
+            1, 1, np.zeros((1080, 1920, 3), dtype=np.uint8),
+        )
+        bot = Bot(desktop, Mode.COMBAT_ONLY, None, audit)
+        attempts = {"count": 0}
 
-        desktop.pick_menu.assert_not_called()
-        metrics = audit.event.call_args.kwargs
-        self.assertEqual(metrics["scanned_points"], 1)
-        self.assertEqual(metrics["ignored_item_matches"], 1)
-        self.assertEqual(metrics["stop_reason"], "time_budget")
+        def attack():
+            attempts["count"] += 1
+            if attempts["count"] <= 5:
+                return False
+            bot.kills += 1
+            return True
+
+        bot.attack = Mock(side_effect=attack)
+        bot.loot = Mock()
+        with patch("cow_desktop.stable_inventory", return_value=inventory()):
+            bot.run(1)
+
+        self.assertEqual(attempts["count"], 6)
+        self.assertEqual(
+            [call.kwargs["failures"] for call in audit.event.call_args_list
+             if call.args and call.args[0] == "SEARCH_OR_ATTACK_FAILED"],
+            [1, 2, 3, 4, 5],
+        )
+        bot.loot.assert_called_once()
 
     def test_attack_search_gets_its_full_budget_after_hud_clear(self):
         vision = Mock()
@@ -1223,6 +1315,89 @@ class VisionTests(unittest.TestCase):
         self.assertTrue(desktop.guarded_click((900, 500), "Attack Cow (level-2)", idle=True))
         desktop.mouse.click.assert_called_once_with()
 
+    def test_final_guard_waits_for_transient_hover_text_to_settle(self):
+        desktop = object.__new__(Desktop)
+        desktop.vision = Mock()
+        desktop.move = Mock()
+        desktop._input_check = Mock()
+        desktop.fresh = Mock(side_effect=[
+            Frame(index, index / 20, np.zeros((1080, 1920, 3), dtype=np.uint8))
+            for index in range(1, 4)
+        ])
+        final = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.snapshot = Mock(return_value=final)
+        desktop.mouse = Mock()
+        desktop.vision.hover.side_effect = [
+            "Inventory", "Walk here", "Walk here", "Walk here",
+        ]
+        mask = np.ones((11, 300), dtype=np.uint8)
+        desktop.vision.hover_mask.side_effect = [mask, mask, mask]
+
+        with patch("cow_desktop.time.monotonic", side_effect=[0, .01, .1, .2]):
+            with patch("cow_desktop.time.sleep") as sleep:
+                self.assertTrue(desktop.guarded_click((713, 671), "Walk here"))
+
+        self.assertEqual(desktop.fresh.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+        desktop.mouse.click.assert_called_once_with()
+
+    def test_final_guard_rejects_hover_that_never_matches(self):
+        desktop = object.__new__(Desktop)
+        desktop.vision = Mock()
+        desktop.vision.hover.return_value = "Inventory"
+        desktop.move = Mock()
+        desktop._input_check = Mock()
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop.fresh = Mock(side_effect=[
+            Frame(index, index / 20, image) for index in range(1, 4)
+        ])
+        desktop.snapshot = Mock(return_value=image)
+        desktop.mouse = Mock()
+
+        with patch("cow_desktop.time.monotonic", side_effect=[0, .01, .2, .4, .76]):
+            with patch("cow_desktop.time.sleep"):
+                self.assertFalse(desktop.guarded_click((713, 671), "Walk here"))
+
+        desktop.snapshot.assert_not_called()
+        desktop.mouse.click.assert_not_called()
+
+    def test_route_guard_reacquires_expected_hover_nearby_before_click(self):
+        desktop = object.__new__(Desktop)
+        desktop.vision = Mock(settings={"screen": (1920, 1080)})
+        desktop.vision.hover.return_value = "Walk here"
+        desktop.move = Mock()
+        desktop.fresh = Mock(return_value=Frame(
+            1, 1, np.zeros((1080, 1920, 3), dtype=np.uint8),
+        ))
+        desktop.guarded_click = Mock(side_effect=[False, True])
+
+        self.assertEqual(
+            desktop.guarded_route_click((713, 671), "Walk here"),
+            (713, 665),
+        )
+        self.assertEqual(
+            desktop.guarded_click.call_args_list,
+            [
+                call((713, 671), "Walk here", landmark=None),
+                call((713, 665), "Walk here", landmark=None),
+            ],
+        )
+
+    def test_route_guard_never_clicks_nearby_when_expected_hover_is_absent(self):
+        desktop = object.__new__(Desktop)
+        desktop.vision = Mock(settings={"screen": (1920, 1080)})
+        desktop.vision.hover.return_value = "Take Spinach roll"
+        desktop.move = Mock()
+        desktop.fresh = Mock(return_value=Frame(
+            1, 1, np.zeros((1080, 1920, 3), dtype=np.uint8),
+        ))
+        desktop.guarded_click = Mock(return_value=False)
+
+        self.assertIsNone(desktop.guarded_route_click((713, 671), "Walk here"))
+        desktop.guarded_click.assert_called_once_with(
+            (713, 671), "Walk here", landmark=None,
+        )
+
     def test_bones_only_chooses_bones_from_a_cowhide_stack(self):
         desktop = self.fake_desktop(self.image("attack_cow"))
         hover, menu = self.image("take_cowhide"), self.image("rightclick_menu")
@@ -1280,12 +1455,444 @@ class VisionTests(unittest.TestCase):
             route = Route(path / "route.json", self.vision)
             desktop = Mock()
             desktop.fresh.return_value = Frame(1, 1, before)
-            desktop.guarded_click.return_value = True
+            desktop.hover_is_stable.return_value = False
+            desktop.guarded_route_click.return_value = (1000, 180)
             with patch("cow_desktop.locate", return_value=(1000, 180)):
                 with patch("cow_desktop.time.monotonic", side_effect=[0, .1, 2]):
                     with self.assertRaisesRegex(SafetyError, "timed out"):
                         route.run("to_bank", desktop, Mock())
-            desktop.guarded_click.assert_called_once()
+            desktop.guarded_route_click.assert_called_once()
+
+    def test_open_gate_step_is_skipped_when_close_gate_hover_is_stable(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        gate_origin = np.full((24, 24, 3), 100, dtype=np.uint8)
+        walk_origin = np.full((24, 24, 3), 150, dtype=np.uint8)
+        arrival = np.full((24, 24, 3), 255, dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            for name, saved in (
+                ("gate_origin.png", gate_origin), ("walk_origin.png", walk_origin),
+                ("arrival.png", arrival),
+            ):
+                save_image(path / name, saved)
+            shared = {
+                "arrival": "arrival.png", "arrival_roi": [700, 500, 24, 24],
+                "offset": [0, 0], "search": [0, 40, 1676, 830], "timeout": 1,
+            }
+            gate_step = {**shared, "origin": "gate_origin.png", "hover": "Open Gate"}
+            walk_step = {**shared, "origin": "walk_origin.png", "hover": "Walk here"}
+            route_path = path / "route.json"
+            route_path.write_text(json.dumps({
+                "screen": [1920, 1080],
+                "to_bank": [gate_step, walk_step], "to_cows": [walk_step],
+            }))
+            route = Route(route_path, self.vision)
+            desktop = Mock()
+            desktop.fresh.return_value = Frame(1, 1, image)
+            desktop.hover_is_stable.return_value = True
+            desktop.guarded_route_click.return_value = (200, 200)
+            audit = Mock()
+
+            with patch(
+                "cow_desktop.locate",
+                side_effect=[(100, 100), (100, 100), (200, 200), (200, 200)],
+            ):
+                with patch("cow_desktop.time.monotonic", side_effect=[0, 2]):
+                    with self.assertRaisesRegex(SafetyError, "timed out"):
+                        route.run("to_bank", desktop, audit)
+
+            desktop.hover_is_stable.assert_called_once()
+            hover_args = desktop.hover_is_stable.call_args.args
+            self.assertEqual(hover_args[:2], ((100, 100), "Close Gate"))
+            self.assertEqual(hover_args[2][0], (100, 100, 24, 24))
+            np.testing.assert_array_equal(hover_args[2][1], gate_origin)
+            desktop.guarded_route_click.assert_called_once()
+            click_args = desktop.guarded_route_click.call_args
+            self.assertEqual(click_args.args, ((200, 200), "Walk here"))
+            self.assertEqual(
+                click_args.kwargs["landmark"][0], (200, 200, 24, 24),
+            )
+            np.testing.assert_array_equal(
+                click_args.kwargs["landmark"][1], walk_origin,
+            )
+            audit.event.assert_any_call(
+                "ROUTE_GATE_ALREADY_OPEN", desktop.fresh.return_value,
+                direction="to_bank", step=0,
+            )
+
+    def test_stable_hover_requires_three_identical_close_gate_readings(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        desktop = object.__new__(Desktop)
+        desktop.vision = Mock()
+        desktop.move = Mock()
+        desktop.fresh = Mock(return_value=Frame(1, 1, image))
+        desktop.snapshot = Mock(return_value=image)
+        desktop._input_check = Mock()
+        mask = np.ones((11, 80), dtype=bool)
+        desktop.vision.hover_mask.return_value = mask
+        desktop.vision.hover.side_effect = ["Close Gate", "Close Gate", "Close Gate"]
+
+        self.assertTrue(desktop.hover_is_stable((500, 400), "Close Gate"))
+
+        desktop.vision.hover.side_effect = ["Close Gate", "Open Gate"]
+        self.assertFalse(desktop.hover_is_stable((500, 400), "Close Gate"))
+
+    def test_registered_arrival_confirmations_survive_skipped_frames(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        origin = np.full((24, 24, 3), 100, dtype=np.uint8)
+        arrival = np.full((24, 24, 3), 200, dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            for name, saved in (
+                ("before.png", image), ("arrival_screenshot.png", image),
+                ("origin.png", origin), ("arrival.png", arrival),
+            ):
+                save_image(path / name, saved)
+            step = {
+                "origin": "origin.png", "arrival": "arrival.png",
+                "reference": "before.png", "arrival_screenshot": "arrival_screenshot.png",
+                "arrival_roi": [700, 500, 24, 24], "offset": [0, 0],
+                "search": [0, 40, 1676, 830], "hover": "Walk here", "timeout": 1,
+            }
+            route_path = path / "route.json"
+            route_path.write_text(json.dumps({
+                "screen": [1920, 1080], "to_bank": [step], "to_cows": [step],
+            }))
+            route = Route(route_path, self.vision)
+            timestamps = [0, 0.01, 0.02, 0.05, 0.10, 0.16, 0.21, 0.26, 0.37]
+            frames = [
+                Frame(index, at, image) for index, at in enumerate(timestamps, 1)
+            ]
+            desktop = Mock()
+            desktop.fresh.side_effect = frames
+            desktop.guarded_route_click.return_value = (500, 300)
+            audit = Mock()
+
+            with patch("cow_desktop.locate", return_value=(500, 300)):
+                with patch("cow_desktop.registered_route_arrival", return_value=True) as aligned:
+                    with patch("cow_desktop.time.monotonic", return_value=0):
+                        route.run("to_bank", desktop, audit)
+
+            self.assertEqual(aligned.call_count, 3)
+            audit.event.assert_any_call(
+                "ROUTE_ARRIVED", frames[8],
+                direction="to_bank", step=0,
+            )
+
+    def test_route_scene_alignment_projects_points_and_arrival_roi(self):
+        rng = np.random.default_rng(42)
+        reference = rng.integers(0, 256, (420, 520, 3), dtype=np.uint8)
+        transform = np.float32([
+            [1.05, 0.02, 12], [-0.01, 1.10, 8], [0, 0, 1],
+        ])
+        current = cv2.warpPerspective(reference, transform, (520, 420))
+        rect = [0, 0, 520, 420]
+
+        matrix = route_scene_homography(reference, current, rect)
+        self.assertIsNotNone(matrix)
+        actual = project_route_point(matrix, (260, 210), rect)
+        expected = cv2.perspectiveTransform(
+            np.float32([[[260, 210]]]), transform,
+        )[0, 0]
+        self.assertLess(np.linalg.norm(np.asarray(actual) - expected), 3)
+        self.assertTrue(registered_route_arrival(
+            reference, current, [200, 150, 100, 80], rect,
+        ))
+
+    def test_recalibrate_route_step_changes_only_the_selected_step(self):
+        rng = np.random.default_rng(42)
+        before = rng.integers(0, 256, (1080, 1920, 3), dtype=np.uint8)
+        after = before.copy()
+        after[100:116, 100:124] = rng.integers(
+            0, 256, (16, 24, 3), dtype=np.uint8,
+        )
+        origin = np.full((20, 20, 3), 80, dtype=np.uint8)
+        arrival = np.full((20, 20, 3), 120, dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile = root / "profile"
+            profile.mkdir()
+            (profile / "font.json").write_text("{}", encoding="utf-8")
+            save_image(root / "origin.png", origin)
+            save_image(root / "arrival.png", arrival)
+            step = {
+                "origin": "origin.png", "arrival": "arrival.png",
+                "arrival_roi": [300, 300, 20, 20], "offset": [10, 10],
+                "search": [0, 40, 1676, 830], "hover": "Walk here", "timeout": 15,
+            }
+            route_path = root / "route.json"
+            original = {
+                "screen": [1920, 1080],
+                "to_bank": [dict(step, label=f"out-{index}") for index in range(4)],
+                "to_cows": [dict(step, label="return")],
+            }
+            route_path.write_text(json.dumps(original), encoding="utf-8")
+
+            events = []
+            desktop = Mock()
+            desktop.snapshot.return_value = before
+            with patch("cow_bot.Vision", return_value=self.vision):
+                with patch("cow_bot.PROFILE", profile):
+                    with patch("cow_desktop.Desktop", return_value=desktop):
+                        with patch(
+                            "cow_bot.countdown",
+                            side_effect=lambda *args: events.append("countdown"),
+                        ):
+                            with patch(
+                                "cow_bot.verify_route_step_start",
+                                side_effect=lambda *args: events.append("verify"),
+                            ):
+                                with patch(
+                                    "cow_bot.verify_route_step_arrival",
+                                    side_effect=lambda *args: events.append("verify_arrival"),
+                                ):
+                                    with patch("builtins.input", return_value=""):
+                                        with patch(
+                                            "cow_bot.countdown_snapshot",
+                                            side_effect=lambda *args: (
+                                                events.append("arrival_snapshot"), after,
+                                            )[1],
+                                        ):
+                                            with patch(
+                                                "cow_bot.select_rect",
+                                                side_effect=[
+                                                    [10, 10, 40, 30], [100, 100, 24, 16],
+                                                ],
+                                            ):
+                                                with patch(
+                                                    "cow_bot.select_point", return_value=(900, 800),
+                                                ) as select_destination:
+                                                    with patch(
+                                                        "cow_bot.route_action",
+                                                        return_value=("Walk here", None),
+                                                    ):
+                                                        with patch(
+                                                            "cow_bot.arrival_timeout",
+                                                            return_value=15,
+                                                        ):
+                                                            recalibrate_route_step(
+                                                                route_path, "to_bank", 4,
+                                                            )
+
+            self.assertEqual(events[:2], ["countdown", "verify"])
+            self.assertLess(events.index("arrival_snapshot"), events.index("verify_arrival"))
+            updated = json.loads(route_path.read_text(encoding="utf-8"))
+            self.assertEqual(updated["to_bank"][:3], original["to_bank"][:3])
+            self.assertEqual(updated["to_cows"], original["to_cows"])
+            self.assertNotEqual(updated["to_bank"][3], original["to_bank"][3])
+            self.assertEqual(updated["to_bank"][3]["offset"], [890, 790])
+            self.assertTrue((root / updated["to_bank"][3]["origin"]).is_file())
+            self.assertTrue((root / updated["to_bank"][3]["arrival"]).is_file())
+            select_destination.assert_called_once_with(before, (820, 740, 370, 180))
+            Route(route_path, self.vision)
+
+    def test_step_recalibration_alerts_only_after_previous_arrival_is_verified(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        arrival = np.full((16, 24, 3), 255, dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            save_image(path / "previous_arrival.png", arrival)
+            save_image(path / "previous_arrival_screenshot.png", image)
+            step = {
+                "origin": "unused.png", "arrival": "previous_arrival.png",
+                "arrival_screenshot": "previous_arrival_screenshot.png",
+                "arrival_roi": [100, 100, 24, 16], "search": [0, 40, 1676, 830],
+            }
+            data = {"to_bank": [step, step, step, step]}
+            desktop = Mock()
+            desktop.snapshot.return_value = image
+            output = io.StringIO()
+
+            with patch("cow_desktop.registered_route_arrival", return_value=True) as matches:
+                with patch("cow_bot.time.sleep"):
+                    with contextlib.redirect_stdout(output):
+                        verify_route_step_start(path / "route.json", data, "to_bank", 4, desktop)
+
+            self.assertEqual(matches.call_count, 3)
+            self.assertIn("ALERT: 已確認在 to_bank 第 4 步的正確起點", output.getvalue())
+
+    def test_step_recalibration_refuses_unverified_start_without_alert(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        arrival = np.full((16, 24, 3), 255, dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            save_image(path / "previous_arrival.png", arrival)
+            save_image(path / "previous_arrival_screenshot.png", image)
+            step = {
+                "origin": "unused.png", "arrival": "previous_arrival.png",
+                "arrival_screenshot": "previous_arrival_screenshot.png",
+                "arrival_roi": [100, 100, 24, 16], "search": [0, 40, 1676, 830],
+            }
+            data = {"to_bank": [step, step, step, step]}
+            desktop = Mock()
+            desktop.snapshot.return_value = image
+            output = io.StringIO()
+
+            with patch("cow_desktop.registered_route_arrival", return_value=False):
+                with patch("cow_bot.ROUTE_START_VERIFY_TIMEOUT_SECONDS", 0.1):
+                    with patch("cow_bot.time.monotonic", side_effect=[0, 0, 1]):
+                        with patch("cow_bot.time.sleep"):
+                            with contextlib.redirect_stdout(output):
+                                with self.assertRaisesRegex(
+                                    SafetyError, "could not be verified",
+                                ):
+                                    verify_route_step_start(
+                                        path / "route.json", data, "to_bank", 4, desktop,
+                                    )
+
+            self.assertNotIn("ALERT:", output.getvalue())
+
+    def test_step_recalibration_alerts_after_three_arrival_landmark_matches(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        roi = [100, 100, 24, 16]
+        arrival = np.full((16, 24, 3), 255, dtype=np.uint8)
+        image[100:116, 100:124] = arrival
+        desktop = Mock()
+        desktop.snapshot.return_value = image
+        output = io.StringIO()
+
+        with patch("cow_desktop.registered_route_arrival", return_value=False) as registered:
+            with patch("cow_bot.time.sleep"):
+                with contextlib.redirect_stdout(output):
+                    verify_route_step_arrival(
+                        "to_bank", 3, image, roi, arrival, [0, 40, 1676, 830], desktop,
+                    )
+
+        self.assertEqual(desktop.snapshot.call_count, 3)
+        registered.assert_not_called()
+        self.assertIn(
+            "ALERT: 已確認 to_bank 第 3 步的抵達地標，連續 3 次畫面符合",
+            output.getvalue(),
+        )
+        self.assertIn("不代表角色位於原畫面的綠色點選框", output.getvalue())
+
+    def test_step_recalibration_refuses_unverified_arrival_without_alert(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        arrival = np.full((16, 24, 3), 255, dtype=np.uint8)
+        desktop = Mock()
+        desktop.snapshot.return_value = image
+        output = io.StringIO()
+
+        with patch("cow_desktop.registered_route_arrival", return_value=False):
+            with patch("cow_bot.ROUTE_ARRIVAL_VERIFY_TIMEOUT_SECONDS", 0.1):
+                with patch("cow_bot.time.monotonic", side_effect=[0, 0, 1]):
+                    with patch("cow_bot.time.sleep"):
+                        with contextlib.redirect_stdout(output):
+                            with self.assertRaisesRegex(
+                                SafetyError, "Arrival landmark .* could not be verified",
+                            ):
+                                verify_route_step_arrival(
+                                    "to_bank", 3, image, [100, 100, 24, 16], arrival,
+                                    [0, 40, 1676, 830], desktop,
+                                )
+
+        self.assertNotIn("ALERT: 已確認", output.getvalue())
+
+    def test_registered_route_target_waits_until_projected_point_stabilizes(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        frames = [Frame(index, index / 20, image) for index in range(1, 6)]
+        desktop = Mock()
+        desktop.fresh.side_effect = frames
+        desktop.move = Mock()
+        projected = [(100, 100), (118, 100), (119, 101), (120, 100), (121, 100)]
+
+        with patch("cow_desktop.route_scene_homography", return_value=np.eye(3)):
+            with patch("cow_desktop.project_route_point", side_effect=projected):
+                with patch("cow_desktop.time.monotonic", return_value=0):
+                    point, check = stable_route_target(
+                        image, (500, 300), [0, 40, 1676, 830], desktop,
+                    )
+
+        self.assertEqual(point, (120, 100))
+        self.assertIs(check, frames[4])
+        desktop.move.assert_called_once_with((120, 100))
+
+    def test_route_reference_search_includes_anchors_below_scene_search_boundary(self):
+        rng = np.random.default_rng(42)
+        reference = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        origin = rng.integers(0, 256, (45, 380, 3), dtype=np.uint8)
+        reference[834:879, 230:610] = origin
+        search = [0, 40, 1676, 830]
+
+        with self.assertRaisesRegex(SafetyError, "Route origin anchor not found"):
+            locate(reference, origin, search)
+
+        expanded = route_reference_search(search, reference.shape)
+        anchor = locate(reference, origin, expanded)
+        self.assertEqual(anchor, (230, 834))
+        target_search = route_target_search(
+            search, (anchor[0] + 399, anchor[1] + 168), reference.shape,
+        )
+        self.assertEqual(target_search, [0, 40, 1676, 992])
+        self.assertEqual(
+            project_route_point(np.eye(3), (629, 1002), target_search),
+            (629, 1002),
+        )
+
+    def test_route_scene_alignment_rejects_unrelated_scenes(self):
+        rng = np.random.default_rng(21)
+        reference = rng.integers(0, 256, (420, 520, 3), dtype=np.uint8)
+        unrelated = np.random.default_rng(22).integers(
+            0, 256, (420, 520, 3), dtype=np.uint8,
+        )
+        self.assertIsNone(route_scene_homography(
+            reference, unrelated, [0, 0, 520, 420],
+        ))
+
+    def test_route_uses_scene_projection_when_entry_anchor_is_missing(self):
+        before = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        origin = np.full((24, 24, 3), 100, dtype=np.uint8)
+        arrival = np.full((24, 24, 3), 200, dtype=np.uint8)
+        current = self.image("attack_cow")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            save_image(path / "to_bank_00_before_screenshot.png", before)
+            save_image(path / "origin.png", origin)
+            save_image(path / "arrival.png", arrival)
+            step = {
+                "origin": "origin.png", "arrival": "arrival.png",
+                "reference": "to_bank_00_before_screenshot.png",
+                "arrival_roi": [700, 500, 24, 24], "offset": [10, 10],
+                "search": [0, 40, 1676, 830], "hover": "Walk here", "timeout": 1,
+            }
+            route_path = path / "route.json"
+            route_path.write_text(json.dumps({
+                "screen": [1920, 1080], "to_bank": [step], "to_cows": [step],
+            }))
+            route = Route(route_path, self.vision)
+            desktop = Mock()
+            desktop.fresh.return_value = Frame(1, 1, current)
+            desktop.guarded_route_click.return_value = (516, 310)
+            audit = Mock()
+
+            def locate_side_effect(image, template, rect):
+                if np.array_equal(image, before):
+                    return 500, 300
+                raise SafetyError("Route origin anchor not found")
+
+            check_frame = Frame(2, 2, current)
+            with patch("cow_desktop.locate", side_effect=locate_side_effect):
+                with patch(
+                    "cow_desktop.stable_route_target",
+                    return_value=((510, 310), check_frame),
+                ) as settle:
+                    with patch("cow_desktop.time.monotonic", side_effect=[0, 2]):
+                        with self.assertRaisesRegex(SafetyError, "timed out"):
+                            route.run("to_bank", desktop, audit)
+
+            settle.assert_called_once()
+            desktop.guarded_route_click.assert_called_once_with(
+                (510, 310), "Walk here", landmark=None,
+            )
+            audit.event.assert_any_call(
+                "ROUTE_SCENE_REALIGNED", check_frame,
+                direction="to_bank", step=0, point=[510, 310],
+            )
+            audit.event.assert_any_call(
+                "ROUTE_HOVER_REACQUIRED", desktop.fresh.return_value,
+                direction="to_bank", step=0, action="Walk here",
+                original_point=[510, 310], point=[516, 310],
+            )
 
     def test_bank_returns_only_after_all_slots_verified_empty(self):
         desktop = Mock()

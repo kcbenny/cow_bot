@@ -1,0 +1,13 @@
+{"event": 1, "at": 1795196213.7065442, "state": "INVENTORY_REOPENED", "cowhide": 28, "bones": 0, "empty": 0, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1795196213.8882399, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1795196214.2545347, "state": "WALK_TO_BANK", "screenshot": "00003_WALK_TO_BANK.png"}
+{"event": 4, "at": 1795196215.1641078, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 0, "point": [756, 624], "screenshot": "00004_ROUTE_SCENE_REALIGNED.png"}
+{"event": 5, "at": 1795196215.43635, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 0, "action": "Walk here", "screenshot": "00005_ROUTE_CLICK.png"}
+{"event": 6, "at": 1795196218.6234384, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 0, "screenshot": "00006_ROUTE_ARRIVED.png"}
+{"event": 7, "at": 1795196219.5419562, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 1, "action": "Open Gate", "screenshot": "00007_ROUTE_CLICK.png"}
+{"event": 8, "at": 1795196220.2234583, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 1, "screenshot": "00008_ROUTE_ARRIVED.png"}
+{"event": 9, "at": 1795196221.1041255, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 2, "point": [710, 849], "screenshot": "00009_ROUTE_SCENE_REALIGNED.png"}
+{"event": 10, "at": 1795196222.508436, "state": "ROUTE_HOVER_REACQUIRED", "direction": "to_bank", "step": 2, "action": "Walk here", "original_point": [710, 849], "point": [714, 845], "screenshot": "00010_ROUTE_HOVER_REACQUIRED.png"}
+{"event": 11, "at": 1795196222.6430933, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 2, "action": "Walk here", "screenshot": "00011_ROUTE_CLICK.png"}
+{"event": 12, "at": 1795196227.5112872, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 2, "screenshot": "00012_ROUTE_ARRIVED.png"}
+{"event": 13, "at": 1795196230.9456365, "state": "SAFE_STOP", "reason": "Aligned route target falls outside the verified scene", "screenshot": "00013_SAFE_STOP.png"}

@@ -1,0 +1,9 @@
+{"event": 1, "at": 1795109110.7420633, "state": "INVENTORY_REOPENED", "cowhide": 28, "bones": 0, "empty": 0, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1795109110.9073148, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1795109111.255873, "state": "WALK_TO_BANK", "screenshot": "00003_WALK_TO_BANK.png"}
+{"event": 4, "at": 1795109112.1462917, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 0, "point": [719, 656], "screenshot": "00004_ROUTE_SCENE_REALIGNED.png"}
+{"event": 5, "at": 1795109112.4043324, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 0, "action": "Walk here", "screenshot": "00005_ROUTE_CLICK.png"}
+{"event": 6, "at": 1795109115.3901117, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 0, "screenshot": "00006_ROUTE_ARRIVED.png"}
+{"event": 7, "at": 1795109116.3890905, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 1, "point": [912, 535], "screenshot": "00007_ROUTE_SCENE_REALIGNED.png"}
+{"event": 8, "at": 1795109116.7729769, "state": "ROUTE_GATE_ALREADY_OPEN", "direction": "to_bank", "step": 1, "screenshot": "00008_ROUTE_GATE_ALREADY_OPEN.png"}
+{"event": 9, "at": 1795109117.151262, "state": "SAFE_STOP", "reason": "Route origin anchor not found", "screenshot": "00009_SAFE_STOP.png"}

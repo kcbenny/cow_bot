@@ -25,6 +25,16 @@ BUSY_TARGET_BLACKLIST_SECONDS = 20
 BUSY_TARGET_BLACKLIST_RADIUS = 36
 CAPTURE_INTERVAL_SECONDS = 0.05
 MENU_RENDER_TIMEOUT_SECONDS = 1.0
+ROUTE_FEATURE_MIN_INLIERS = 30
+ROUTE_FEATURE_MIN_INLIER_RATIO = 0.4
+ROUTE_FEATURE_MIN_COVERAGE = 0.02
+ROUTE_SCENE_SETTLE_TIMEOUT_SECONDS = 3
+HOVER_SETTLE_TIMEOUT_SECONDS = 0.75
+ROUTE_HOVER_SEARCH_OFFSETS = (
+    (0, -6), (4, -4), (6, 0), (4, 4), (0, 6), (-4, 4), (-6, 0), (-4, -4),
+    (0, -12), (8, -8), (12, 0), (8, 8), (0, 12), (-8, 8), (-12, 0), (-8, -8),
+    (0, -18), (13, -13), (18, 0), (13, 13), (0, 18), (-13, 13), (-18, 0), (-13, -13),
+)
 
 
 def menu_template_location(
@@ -214,20 +224,29 @@ class Desktop:
         landmark: tuple[tuple[int, int, int, int], np.ndarray] | None = None,
     ) -> bool:
         self.move(point)
+        deadline = time.monotonic() + HOVER_SETTLE_TIMEOUT_SECONDS
         previous = None
-        for _ in range(2):
+        while time.monotonic() < deadline:
             frame = self.fresh()
             if self.vision.hover(frame.image) != expected:
-                return False
+                previous = None
+                time.sleep(CAPTURE_INTERVAL_SECONDS)
+                continue
             if idle and not self.vision.hud_clear(frame.image):
                 return False
             mask = self.vision.hover_mask(frame.image)
-            if previous is not None and not np.array_equal(mask, previous):
-                return False
+            if previous is not None and np.array_equal(mask, previous):
+                break
             previous = mask
+            time.sleep(CAPTURE_INTERVAL_SECONDS)
+        else:
+            return False
         self._input_check()
         final = self.snapshot()
-        if not np.array_equal(self.vision.hover_mask(final), previous):
+        if (
+            self.vision.hover(final) != expected
+            or not np.array_equal(self.vision.hover_mask(final), previous)
+        ):
             return False
         if idle and not self.vision.hud_clear(final):
             return False
@@ -237,17 +256,73 @@ class Desktop:
         self.mouse.click()
         return True
 
+    def guarded_route_click(
+        self, point: tuple[int, int], expected: str, *,
+        landmark: tuple[tuple[int, int, int, int], np.ndarray] | None = None,
+    ) -> tuple[int, int] | None:
+        if self.guarded_click(point, expected, landmark=landmark):
+            return point
+
+        width, height = self.vision.settings["screen"]
+        for dx, dy in ROUTE_HOVER_SEARCH_OFFSETS:
+            candidate = (point[0] + dx, point[1] + dy)
+            if not 1 <= candidate[0] < width - 1 or not 24 <= candidate[1] < height - 48:
+                continue
+            self.move(candidate)
+            frame = self.fresh()
+            if landmark is not None and not similar(
+                crop(frame.image, landmark[0]), landmark[1], 6,
+            ):
+                return None
+            if self.vision.hover(frame.image) != expected:
+                continue
+            if self.guarded_click(candidate, expected, landmark=landmark):
+                return candidate
+        return None
+
+    def hover_is_stable(
+        self, point: tuple[int, int], expected: str,
+        landmark: tuple[tuple[int, int, int, int], np.ndarray] | None = None,
+    ) -> bool:
+        self.move(point)
+        previous = None
+        for _ in range(2):
+            frame = self.fresh()
+            if self.vision.hover(frame.image) != expected:
+                return False
+            if landmark is not None and not similar(
+                crop(frame.image, landmark[0]), landmark[1], 6,
+            ):
+                return False
+            mask = self.vision.hover_mask(frame.image)
+            if previous is not None and not np.array_equal(mask, previous):
+                return False
+            previous = mask
+        self._input_check()
+        final = self.snapshot()
+        return (
+            self.vision.hover(final) == expected
+            and np.array_equal(self.vision.hover_mask(final), previous)
+            and (
+                landmark is None
+                or similar(crop(final, landmark[0]), landmark[1], 6)
+            )
+        )
+
     def key(self, key: str) -> None:
         self._input_check()
         self.mouse.press(key)
 
     def route_menu_click(
         self, point: tuple[int, int], template: np.ndarray,
-        landmark: tuple[tuple[int, int, int, int], np.ndarray],
+        landmark: tuple[tuple[int, int, int, int], np.ndarray] | None,
+        *, expected: str | None = None,
     ) -> bool:
         self.move(point)
         frame = self.fresh()
-        if not similar(crop(frame.image, landmark[0]), landmark[1], 6):
+        if landmark is not None and not similar(crop(frame.image, landmark[0]), landmark[1], 6):
+            return False
+        if expected is not None and self.vision.hover(frame.image) != expected:
             return False
         self._input_check()
         self.mouse.click(button="right")
@@ -423,6 +498,169 @@ def locate(image: np.ndarray, template: np.ndarray, rect: list[int]) -> tuple[in
     return x + rect[0], y + rect[1]
 
 
+def route_scene_homography(
+    reference: np.ndarray, current: np.ndarray, rect: list[int],
+) -> np.ndarray | None:
+    if reference.shape != current.shape:
+        return None
+    reference_region = cv2.cvtColor(crop(reference, rect), cv2.COLOR_RGB2GRAY)
+    current_region = cv2.cvtColor(crop(current, rect), cv2.COLOR_RGB2GRAY)
+    orb = cv2.ORB_create(nfeatures=2500)
+    reference_points, reference_descriptors = orb.detectAndCompute(reference_region, None)
+    current_points, current_descriptors = orb.detectAndCompute(current_region, None)
+    if reference_descriptors is None or current_descriptors is None:
+        return None
+    pairs = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(
+        reference_descriptors, current_descriptors, k=2,
+    )
+    matches = [
+        pair[0] for pair in pairs
+        if len(pair) == 2 and pair[0].distance < 0.72 * pair[1].distance
+    ]
+    if len(matches) < ROUTE_FEATURE_MIN_INLIERS:
+        return None
+    source = np.float32([reference_points[match.queryIdx].pt for match in matches])
+    target = np.float32([current_points[match.trainIdx].pt for match in matches])
+    matrix, mask = cv2.findHomography(source, target, cv2.RANSAC, 4.0)
+    if matrix is None or mask is None or not np.isfinite(matrix).all():
+        return None
+    inlier_mask = mask.ravel().astype(bool)
+    inlier_count = int(inlier_mask.sum())
+    if inlier_count < ROUTE_FEATURE_MIN_INLIERS or inlier_count / len(matches) < ROUTE_FEATURE_MIN_INLIER_RATIO:
+        return None
+    source_inliers = source[inlier_mask]
+    target_inliers = target[inlier_mask]
+    width, height = rect[2:]
+    source_coverage = cv2.contourArea(cv2.convexHull(source_inliers)) / (width * height)
+    target_coverage = cv2.contourArea(cv2.convexHull(target_inliers)) / (width * height)
+    if min(source_coverage, target_coverage) < ROUTE_FEATURE_MIN_COVERAGE:
+        return None
+    projected = cv2.perspectiveTransform(source_inliers.reshape(1, -1, 2), matrix)[0]
+    if float(np.median(np.linalg.norm(projected - target_inliers, axis=1))) > 2.5:
+        return None
+    return matrix
+
+
+def project_route_point(
+    matrix: np.ndarray, point: tuple[int, int], rect: list[int],
+) -> tuple[int, int]:
+    source = np.float32([[[point[0] - rect[0], point[1] - rect[1]]]])
+    projected = cv2.perspectiveTransform(source, matrix)[0, 0]
+    probes = np.float32([[
+        [source[0, 0, 0] + 40, source[0, 0, 1]],
+        [source[0, 0, 0], source[0, 0, 1] + 40],
+    ]])
+    projected_probes = cv2.perspectiveTransform(probes, matrix)[0]
+    scale_x = float(np.linalg.norm(projected_probes[0] - projected) / 40)
+    scale_y = float(np.linalg.norm(projected_probes[1] - projected) / 40)
+    if not 0.5 <= scale_x <= 2 or not 0.5 <= scale_y <= 2:
+        raise SafetyError("Route scene alignment has an unsafe local scale")
+    x, y = round(float(projected[0])) + rect[0], round(float(projected[1])) + rect[1]
+    if not rect[0] <= x < rect[0] + rect[2] or not rect[1] <= y < rect[1] + rect[3]:
+        raise SafetyError("Aligned route target falls outside the verified scene")
+    return x, y
+
+
+def stable_route_target(
+    reference: np.ndarray, source_point: tuple[int, int], rect: list[int],
+    desktop: Desktop,
+) -> tuple[tuple[int, int], Frame]:
+    deadline = time.monotonic() + ROUTE_SCENE_SETTLE_TIMEOUT_SECONDS
+    previous_point = None
+    stable_samples = 0
+    while time.monotonic() < deadline:
+        frame = desktop.fresh()
+        matrix = route_scene_homography(reference, frame.image, rect)
+        if matrix is None:
+            previous_point = None
+            stable_samples = 0
+            continue
+        point = project_route_point(matrix, source_point, rect)
+        if previous_point is not None and math.dist(previous_point, point) <= 8:
+            stable_samples += 1
+        else:
+            stable_samples = 0
+        if stable_samples >= 2:
+            desktop.move(point)
+            check = desktop.fresh()
+            matrix = route_scene_homography(reference, check.image, rect)
+            if matrix is None:
+                previous_point = None
+                stable_samples = 0
+                continue
+            checked_point = project_route_point(matrix, source_point, rect)
+            if math.dist(checked_point, point) <= 8:
+                return point, check
+            previous_point = checked_point
+            stable_samples = 0
+            continue
+        previous_point = point
+    raise SafetyError("Route scene did not stabilize for target verification")
+
+
+def registered_route_arrival(
+    reference: np.ndarray, current: np.ndarray, roi: list[int], search: list[int],
+) -> bool:
+    matrix = route_scene_homography(reference, current, search)
+    if matrix is None:
+        return False
+    x, y, width, height = roi
+    source_corners = np.float32([[
+        [x - search[0], y - search[1]],
+        [x + width - search[0], y - search[1]],
+        [x - search[0], y + height - search[1]],
+        [x + width - search[0], y + height - search[1]],
+    ]])
+    corners = cv2.perspectiveTransform(source_corners, matrix)[0]
+    left, top = np.floor(corners.min(axis=0)).astype(int)
+    right, bottom = np.ceil(corners.max(axis=0)).astype(int)
+    expected_width, expected_height = right - left, bottom - top
+    if (
+        expected_width < 8 or expected_height < 8
+        or not 0 <= left < right <= search[2]
+        or not 0 <= top < bottom <= search[3]
+        or not 0.5 <= expected_width / width <= 2
+        or not 0.5 <= expected_height / height <= 2
+    ):
+        return False
+    warped = cv2.warpPerspective(
+        crop(reference, search), matrix, (search[2], search[3]),
+    )
+    expected = warped[top:bottom, left:right]
+    actual_region = crop(current, search)
+    actual = actual_region[top:bottom, left:right]
+    delta = np.abs(actual.astype(np.int16) - expected.astype(np.int16))
+    return bool(delta.mean() <= 18 and np.mean(delta.max(axis=2) <= 32) >= 0.90)
+
+
+def route_screenshot_path(path: Path, step: dict, kind: str) -> Path | None:
+    key = "reference" if kind == "before" else "arrival_screenshot"
+    recorded_path = step.get(key)
+    if recorded_path:
+        candidate = path.parent / recorded_path
+        return candidate if candidate.is_file() else None
+    origin = path.parent / step["origin"]
+    stem = origin.stem
+    if not stem.endswith("_origin"):
+        return None
+    stem = stem[:-len("_origin")]
+    suffix = "_before_screenshot.png" if kind == "before" else "_arrival_screenshot.png"
+    candidate = origin.with_name(stem + suffix)
+    return candidate if candidate.is_file() else None
+
+
+def route_reference_search(search: list[int], image_shape: tuple[int, ...]) -> list[int]:
+    bottom = image_shape[0] - 48
+    return [search[0], search[1], search[2], max(search[3], bottom - search[1])]
+
+
+def route_target_search(
+    search: list[int], point: tuple[int, int], image_shape: tuple[int, ...],
+) -> list[int]:
+    bottom = min(image_shape[0] - 48, max(search[1] + search[3], point[1] + 40))
+    return [search[0], search[1], search[2], bottom - search[1]]
+
+
 class Route:
     def __init__(self, path: Path, vision: Vision) -> None:
         self.path = path
@@ -454,31 +692,107 @@ class Route:
                 if similar(crop(second.image, step["arrival_roi"]), arrival, 6):
                     audit.event("ROUTE_ALREADY_ARRIVED", second, direction=direction, step=index)
                     continue
-            anchor = locate(frame.image, origin, step["search"])
-            point = (anchor[0] + step["offset"][0], anchor[1] + step["offset"][1])
-            # Reacquire after hover settles; never trust the earlier anchor alone.
-            desktop.move(point)
-            check = desktop.fresh()
-            if locate(check.image, origin, step["search"]) != anchor:
-                raise SafetyError("Route anchor moved during verification")
-            origin_rect = (anchor[0], anchor[1], origin.shape[1], origin.shape[0])
+            reference_path = route_screenshot_path(self.path, step, "before")
+            reference = load_image(reference_path) if reference_path is not None else None
+            registered = False
+            try:
+                anchor = locate(frame.image, origin, step["search"])
+                point = (anchor[0] + step["offset"][0], anchor[1] + step["offset"][1])
+            except SafetyError as error:
+                if str(error) != "Route origin anchor not found" or reference is None:
+                    raise
+                source_search = route_reference_search(step["search"], reference.shape)
+                try:
+                    source_anchor = locate(reference, origin, source_search)
+                except SafetyError as source_error:
+                    raise SafetyError(
+                        "Route origin anchor is missing from its saved reference screenshot",
+                    ) from source_error
+                source_point = (
+                    source_anchor[0] + step["offset"][0],
+                    source_anchor[1] + step["offset"][1],
+                )
+                registration_search = route_target_search(
+                    step["search"], source_point, reference.shape,
+                )
+                anchor = None
+                registered = True
+            if registered:
+                point, check = stable_route_target(
+                    reference, source_point, registration_search, desktop,
+                )
+                audit.event(
+                    "ROUTE_SCENE_REALIGNED", check, direction=direction,
+                    step=index, point=list(point),
+                )
+            else:
+                point = (anchor[0] + step["offset"][0], anchor[1] + step["offset"][1])
+                # Reacquire after hover settles; never trust the earlier anchor alone.
+                desktop.move(point)
+                check = desktop.fresh()
+                if locate(check.image, origin, step["search"]) != anchor:
+                    raise SafetyError("Route anchor moved during verification")
+            origin_rect = (
+                anchor[0], anchor[1], origin.shape[1], origin.shape[0],
+            ) if anchor is not None else None
+            if step["hover"] == "Open Gate" and desktop.hover_is_stable(
+                point, "Close Gate",
+                (origin_rect, origin) if origin_rect is not None else None,
+            ):
+                audit.event(
+                    "ROUTE_GATE_ALREADY_OPEN", desktop.fresh(),
+                    direction=direction, step=index,
+                )
+                continue
             if step.get("menu_action"):
                 template = load_image(self.path.parent / step["menu_action"])
-                clicked = desktop.route_menu_click(point, template, (origin_rect, origin))
-            else:
-                clicked = desktop.guarded_click(
-                    point, step["hover"], landmark=(origin_rect, origin),
+                clicked = desktop.route_menu_click(
+                    point, template,
+                    (origin_rect, origin) if origin_rect is not None else None,
+                    expected=step["hover"] if registered else None,
                 )
+            else:
+                click_point = desktop.guarded_route_click(
+                    point, step["hover"],
+                    landmark=(origin_rect, origin) if origin_rect is not None else None,
+                )
+                clicked = click_point is not None
+                if click_point is not None:
+                    if click_point != point:
+                        original_point = point
+                        point = click_point
+                        audit.event(
+                            "ROUTE_HOVER_REACQUIRED", desktop.fresh(),
+                            direction=direction, step=index, action=step["hover"],
+                            original_point=list(original_point), point=list(point),
+                        )
             if not clicked:
                 raise SafetyError(f"Route action rejected: {step['hover']}")
             audit.event("ROUTE_CLICK", check, direction=direction, step=index, action=step["hover"])
             deadline = time.monotonic() + step["timeout"]
             confirmations = 0
+            arrival_reference_path = route_screenshot_path(self.path, step, "arrival")
+            arrival_reference = (
+                load_image(arrival_reference_path)
+                if arrival_reference_path is not None else None
+            )
+            last_alignment_at = float("-inf")
             while time.monotonic() < deadline:
                 frame = desktop.fresh()
                 if frame.at > deadline:
                     raise SafetyError(f"Route step {direction}:{index} timed out")
                 matches = similar(crop(frame.image, step["arrival_roi"]), arrival, 6)
+                if (
+                    not matches and arrival_reference is not None
+                    and frame.at - last_alignment_at >= 0.15
+                ):
+                    last_alignment_at = frame.at
+                    matches = registered_route_arrival(
+                        arrival_reference, frame.image,
+                        step["arrival_roi"], step["search"],
+                    )
+                elif not matches and arrival_reference is not None:
+                    continue
                 confirmations = confirmations + 1 if matches else 0
                 if confirmations >= 3:
                     audit.event("ROUTE_ARRIVED", frame, direction=direction, step=index)
@@ -755,11 +1069,7 @@ class Bot:
                 seen_probes.add(probe)
                 occluded_probes.append((probe, "fine"))
         spiral_candidates = None
-        if spiral_actions:
-            spiral_candidates = iter(
-                (point, phase)
-                for point, phase in self.vision.loot_grid(center, radius, fine_radius)
-            )
+        spiral_search_exhausted = False
         while True:
             if time.monotonic() >= deadline:
                 finish("time_budget")
@@ -796,11 +1106,19 @@ class Bot:
                     if point is None:
                         continue
                     is_occluded_probe = True
-                elif spiral_candidates is not None:
+                elif spiral_actions and not spiral_search_exhausted:
+                    if spiral_candidates is None:
+                        spiral_candidates = iter(
+                            (point, phase)
+                            for point, phase in self.vision.loot_grid(
+                                center, radius, fine_radius,
+                            )
+                        )
                     try:
                         point, phase = next(spiral_candidates)
                     except StopIteration:
                         spiral_candidates = None
+                        spiral_search_exhausted = True
                         if "Cowhide" not in self.mode.items:
                             finish("region_exhausted")
                             return
@@ -884,8 +1202,6 @@ class Bot:
             if not self.attack():
                 self.failures += 1
                 self.audit.event("SEARCH_OR_ATTACK_FAILED", self.desktop.fresh(), failures=self.failures)
-                if self.failures >= 5:
-                    raise SafetyError("Five consecutive search/attack failures")
                 continue
             self.failures = 0
             self.loot()

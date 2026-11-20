@@ -28,17 +28,17 @@
     },
     {
       "hover": "Open Gate",
-      "origin": "route_v17_assets\\to_bank_01_origin.png",
-      "arrival": "route_v17_assets\\to_bank_01_arrival.png",
+      "origin": "route_v17_assets\\to_bank_01_recal_20261121_012739_796419\\to_bank_01_recal_20261121_012739_796419_origin.png",
+      "arrival": "route_v17_assets\\to_bank_01_recal_20261121_012739_796419\\to_bank_01_recal_20261121_012739_796419_arrival.png",
       "arrival_roi": [
-        720,
-        573,
-        207,
-        97
+        822,
+        524,
+        90,
+        84
       ],
       "offset": [
-        185,
-        -3
+        191,
+        5
       ],
       "search": [
         0,
@@ -46,21 +46,23 @@
         1676,
         830
       ],
-      "timeout": 15.0
+      "timeout": 15.0,
+      "reference": "route_v17_assets\\to_bank_01_recal_20261121_012739_796419\\to_bank_01_recal_20261121_012739_796419_before_screenshot.png",
+      "arrival_screenshot": "route_v17_assets\\to_bank_01_recal_20261121_012739_796419\\to_bank_01_recal_20261121_012739_796419_arrival_screenshot.png"
     },
     {
       "hover": "Walk here",
-      "origin": "route_v17_assets\\to_bank_02_origin.png",
-      "arrival": "route_v17_assets\\to_bank_02_arrival.png",
+      "origin": "route_v17_assets\\to_bank_02_recal_20261121_001846_621213\\to_bank_02_recal_20261121_001846_621213_origin.png",
+      "arrival": "route_v17_assets\\to_bank_02_recal_20261121_001846_621213\\to_bank_02_recal_20261121_001846_621213_arrival.png",
       "arrival_roi": [
-        578,
-        450,
-        331,
-        212
+        762,
+        650,
+        111,
+        192
       ],
       "offset": [
-        399,
-        168
+        371,
+        201
       ],
       "search": [
         0,
@@ -68,43 +70,71 @@
         1676,
         830
       ],
-      "timeout": 15.0
+      "timeout": 15.0,
+      "reference": "route_v17_assets\\to_bank_02_recal_20261121_001846_621213\\to_bank_02_recal_20261121_001846_621213_before_screenshot.png",
+      "arrival_screenshot": "route_v17_assets\\to_bank_02_recal_20261121_001846_621213\\to_bank_02_recal_20261121_001846_621213_arrival_screenshot.png"
     },
     {
       "hover": "Walk here",
-      "origin": "route_v17_assets\\to_bank_03_origin.png",
-      "arrival": "route_v17_assets\\to_bank_03_arrival.png",
+      "origin": "route_v17_assets\\to_bank_03_recal_20261121_014052_645917\\to_bank_03_recal_20261121_014052_645917_origin.png",
+      "arrival": "route_v17_assets\\to_bank_03_recal_20261121_014052_645917\\to_bank_03_recal_20261121_014052_645917_arrival.png",
       "arrival_roi": [
-        714,
-        573,
-        128,
-        96
+        909,
+        585,
+        96,
+        75
       ],
       "offset": [
+        213,
+        211
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0,
+      "reference": "route_v17_assets\\to_bank_03_recal_20261121_014052_645917\\to_bank_03_recal_20261121_014052_645917_before_screenshot.png",
+      "arrival_screenshot": "route_v17_assets\\to_bank_03_recal_20261121_014052_645917\\to_bank_03_recal_20261121_014052_645917_arrival_screenshot.png"
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_04_recal_20261121_015015_693755\\to_bank_04_recal_20261121_015015_693755_origin.png",
+      "arrival": "route_v17_assets\\to_bank_04_recal_20261121_015015_693755\\to_bank_04_recal_20261121_015015_693755_arrival.png",
+      "arrival_roi": [
+        790,
+        502,
+        106,
+        100
+      ],
+      "offset": [
+        143,
+        206
+      ],
+      "search": [
+        0,
+        40,
+        1676,
+        830
+      ],
+      "timeout": 15.0,
+      "reference": "route_v17_assets\\to_bank_04_recal_20261121_015015_693755\\to_bank_04_recal_20261121_015015_693755_before_screenshot.png",
+      "arrival_screenshot": "route_v17_assets\\to_bank_04_recal_20261121_015015_693755\\to_bank_04_recal_20261121_015015_693755_arrival_screenshot.png"
+    },
+    {
+      "hover": "Walk here",
+      "origin": "route_v17_assets\\to_bank_05_recal_20261121_020433_057472\\to_bank_05_recal_20261121_020433_057472_origin.png",
+      "arrival": "route_v17_assets\\to_bank_05_recal_20261121_020433_057472\\to_bank_05_recal_20261121_020433_057472_arrival.png",
+      "arrival_roi": [
+        826,
+        492,
         98,
-        118
-      ],
-      "search": [
-        0,
-        40,
-        1676,
-        830
-      ],
-      "timeout": 15.0
-    },
-    {
-      "hover": "Walk here",
-      "origin": "route_v17_assets\\to_bank_04_origin.png",
-      "arrival": "route_v17_assets\\to_bank_04_arrival.png",
-      "arrival_roi": [
-        890,
-        573,
-        121,
-        169
+        90
       ],
       "offset": [
-        293,
-        383
+        -301,
+        341
       ],
       "search": [
         0,
@@ -112,29 +142,9 @@
         1676,
         830
       ],
-      "timeout": 15.0
-    },
-    {
-      "hover": "Walk here",
-      "origin": "route_v17_assets\\to_bank_05_origin.png",
-      "arrival": "route_v17_assets\\to_bank_05_arrival.png",
-      "arrival_roi": [
-        718,
-        428,
-        166,
-        112
-      ],
-      "offset": [
-        -65,
-        178
-      ],
-      "search": [
-        0,
-        40,
-        1676,
-        830
-      ],
-      "timeout": 15.0
+      "timeout": 15.0,
+      "reference": "route_v17_assets\\to_bank_05_recal_20261121_020433_057472\\to_bank_05_recal_20261121_020433_057472_before_screenshot.png",
+      "arrival_screenshot": "route_v17_assets\\to_bank_05_recal_20261121_020433_057472\\to_bank_05_recal_20261121_020433_057472_arrival_screenshot.png"
     },
     {
       "hover": "Walk here",

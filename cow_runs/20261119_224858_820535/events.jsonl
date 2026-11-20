@@ -1,0 +1,2 @@
+{"event": 1, "at": 1795099744.3273783, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1795099744.5516212, "state": "SAFE_STOP", "reason": "Capture failed: Foreground-window check failed: unexpected foreground title=''", "screenshot": "00002_SAFE_STOP.png"}

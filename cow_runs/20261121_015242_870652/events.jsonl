@@ -1,0 +1,19 @@
+{"event": 1, "at": 1795197168.891247, "state": "INVENTORY_REOPENED", "cowhide": 28, "bones": 0, "empty": 0, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1795197169.0736053, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1795197169.4361577, "state": "WALK_TO_BANK", "screenshot": "00003_WALK_TO_BANK.png"}
+{"event": 4, "at": 1795197170.2474666, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 0, "point": [688, 664], "screenshot": "00004_ROUTE_SCENE_REALIGNED.png"}
+{"event": 5, "at": 1795197170.5035355, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 0, "action": "Walk here", "screenshot": "00005_ROUTE_CLICK.png"}
+{"event": 6, "at": 1795197174.9740226, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 0, "screenshot": "00006_ROUTE_ARRIVED.png"}
+{"event": 7, "at": 1795197175.889855, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 1, "point": [918, 547], "screenshot": "00007_ROUTE_SCENE_REALIGNED.png"}
+{"event": 8, "at": 1795197176.2906134, "state": "ROUTE_GATE_ALREADY_OPEN", "direction": "to_bank", "step": 1, "screenshot": "00008_ROUTE_GATE_ALREADY_OPEN.png"}
+{"event": 9, "at": 1795197177.1222558, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 2, "point": [725, 829], "screenshot": "00009_ROUTE_SCENE_REALIGNED.png"}
+{"event": 10, "at": 1795197178.4440355, "state": "ROUTE_HOVER_REACQUIRED", "direction": "to_bank", "step": 2, "action": "Walk here", "original_point": [725, 829], "point": [729, 825], "screenshot": "00010_ROUTE_HOVER_REACQUIRED.png"}
+{"event": 11, "at": 1795197178.575385, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 2, "action": "Walk here", "screenshot": "00011_ROUTE_CLICK.png"}
+{"event": 12, "at": 1795197183.078203, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 2, "screenshot": "00012_ROUTE_ARRIVED.png"}
+{"event": 13, "at": 1795197184.0101564, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 3, "point": [978, 843], "screenshot": "00013_ROUTE_SCENE_REALIGNED.png"}
+{"event": 14, "at": 1795197184.3609023, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 3, "action": "Walk here", "screenshot": "00014_ROUTE_CLICK.png"}
+{"event": 15, "at": 1795197187.6601772, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 3, "screenshot": "00015_ROUTE_ARRIVED.png"}
+{"event": 16, "at": 1795197189.0342503, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 4, "point": [873, 906], "screenshot": "00016_ROUTE_SCENE_REALIGNED.png"}
+{"event": 17, "at": 1795197189.6421711, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 4, "action": "Walk here", "screenshot": "00017_ROUTE_CLICK.png"}
+{"event": 18, "at": 1795197194.514307, "state": "ROUTE_ARRIVED", "direction": "to_bank", "step": 4, "screenshot": "00018_ROUTE_ARRIVED.png"}
+{"event": 19, "at": 1795197194.9932723, "state": "SAFE_STOP", "reason": "Route origin anchor is missing from its saved reference screenshot", "screenshot": "00019_SAFE_STOP.png"}

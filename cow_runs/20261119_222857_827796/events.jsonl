@@ -1,0 +1,12 @@
+{"event": 1, "at": 1795098544.139079, "state": "INVENTORY_REOPENED", "cowhide": 0, "bones": 0, "empty": 28, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1795098544.3213434, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1795098548.170308, "state": "ATTACK_CLICK", "action": "Attack Cow calf (level-2)", "point": [892, 458], "screenshot": "00003_ATTACK_CLICK.png"}
+{"event": 4, "at": 1795098554.881533, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00004_PLAYER_STOPPED.png"}
+{"event": 5, "at": 1795098563.9476402, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00005_KILL_VERIFIED.png"}
+{"event": 6, "at": 1795098574.3076513, "state": "LOOT_SEARCH_FINISHED", "center": [892, 458], "scanned_points": 9, "fine_points": 9, "coarse_points": 0, "color_candidates": 1, "color_candidate_points": [[901, 500]], "hover_matches": 0, "ignored_item_matches": 0, "farthest_distance": 79.6, "elapsed_seconds": 10.1, "stop_reason": "region_exhausted", "screenshot": "00006_LOOT_SEARCH_FINISHED.png"}
+{"event": 7, "at": 1795098576.668711, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [988, 554], "screenshot": "00007_ATTACK_CLICK.png"}
+{"event": 8, "at": 1795098579.762979, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00008_PLAYER_STOPPED.png"}
+{"event": 9, "at": 1795098589.812798, "state": "ATTACK_MISSED", "screenshot": "00009_ATTACK_MISSED.png"}
+{"event": 10, "at": 1795098589.9904587, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 1, "screenshot": "00010_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 11, "at": 1795098598.407793, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [820, 530], "screenshot": "00011_ATTACK_CLICK.png"}
+{"event": 12, "at": 1795098600.3921223, "state": "SAFE_STOP", "reason": "Capture failed: Foreground-window check failed: unexpected foreground title='f.lux note'", "screenshot": "00012_SAFE_STOP.png"}

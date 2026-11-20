@@ -1,0 +1,4 @@
+{"event": 1, "at": 1795197990.63402, "state": "INVENTORY_REOPENED", "cowhide": 28, "bones": 0, "empty": 0, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1795197990.7972665, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1795197991.1553729, "state": "WALK_TO_BANK", "screenshot": "00003_WALK_TO_BANK.png"}
+{"event": 4, "at": 1795197994.5200562, "state": "SAFE_STOP", "reason": "Route scene did not stabilize for target verification", "screenshot": "00004_SAFE_STOP.png"}

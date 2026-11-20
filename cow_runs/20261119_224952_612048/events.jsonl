@@ -1,0 +1,11 @@
+{"event": 1, "at": 1795099798.0776114, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1795099804.924292, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [1036, 578], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1795099809.2062736, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00003_PLAYER_STOPPED.png"}
+{"event": 4, "at": 1795099815.6685271, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00004_KILL_VERIFIED.png"}
+{"event": 5, "at": 1795099820.8126504, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00005_PICKUP_CLICK.png"}
+{"event": 6, "at": 1795099822.2516813, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 1, "screenshot": "00006_PICKUP_VERIFIED.png"}
+{"event": 7, "at": 1795099822.3786528, "state": "LOOT_SEARCH_FINISHED", "center": [1036, 578], "scanned_points": 2, "fine_points": 1, "coarse_points": 1, "color_candidates": 1, "color_candidate_points": [[947, 603]], "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 119.6, "elapsed_seconds": 6.43, "stop_reason": "target_collected", "screenshot": "00007_LOOT_SEARCH_FINISHED.png"}
+{"event": 8, "at": 1795099826.1810591, "state": "TARGET_BLACKLISTED", "point": [892, 458], "duration_seconds": 20, "reason": "target_in_combat", "screenshot": "00008_TARGET_BLACKLISTED.png"}
+{"event": 9, "at": 1795099828.4406562, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [844, 554], "screenshot": "00009_ATTACK_CLICK.png"}
+{"event": 10, "at": 1795099829.242203, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00010_PLAYER_STOPPED.png"}
+{"event": 11, "at": 1795099835.771036, "state": "SAFE_STOP", "reason": "Capture failed: Foreground-window check failed: unexpected foreground title='Release Notes: 1.147.0 - cow_bot - Visual Studio Code'", "screenshot": "00011_SAFE_STOP.png"}

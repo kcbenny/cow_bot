@@ -1,0 +1,15 @@
+{"event": 1, "at": 1795103291.1556463, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1795103292.820939, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [916, 482], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1795103301.7305286, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00003_PLAYER_STOPPED.png"}
+{"event": 4, "at": 1795103301.9143803, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00004_KILL_VERIFIED.png"}
+{"event": 5, "at": 1795103306.157229, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00005_PICKUP_CLICK.png"}
+{"event": 6, "at": 1795103307.3822036, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 1, "screenshot": "00006_PICKUP_VERIFIED.png"}
+{"event": 7, "at": 1795103307.5062745, "state": "LOOT_SEARCH_FINISHED", "center": [916, 482], "scanned_points": 1, "fine_points": 1, "coarse_points": 0, "color_candidates": 0, "color_candidate_points": [], "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 34.1, "elapsed_seconds": 5.33, "stop_reason": "target_collected", "screenshot": "00007_LOOT_SEARCH_FINISHED.png"}
+{"event": 8, "at": 1795103310.2082524, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [940, 458], "screenshot": "00008_ATTACK_CLICK.png"}
+{"event": 9, "at": 1795103314.663229, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00009_PLAYER_STOPPED.png"}
+{"event": 10, "at": 1795103321.1987329, "state": "KILL_VERIFIED", "kills": 2, "screenshot": "00010_KILL_VERIFIED.png"}
+{"event": 11, "at": 1795103326.5914214, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00011_PICKUP_CLICK.png"}
+{"event": 12, "at": 1795103327.797036, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 2, "screenshot": "00012_PICKUP_VERIFIED.png"}
+{"event": 13, "at": 1795103327.9429758, "state": "LOOT_SEARCH_FINISHED", "center": [940, 458], "scanned_points": 3, "fine_points": 2, "coarse_points": 1, "color_candidates": 1, "color_candidate_points": [[897, 505]], "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 63.7, "elapsed_seconds": 6.48, "stop_reason": "target_collected", "screenshot": "00013_LOOT_SEARCH_FINISHED.png"}
+{"event": 14, "at": 1795103328.3552155, "state": "WALK_TO_BANK", "screenshot": "00014_WALK_TO_BANK.png"}
+{"event": 15, "at": 1795103328.6641843, "state": "SAFE_STOP", "reason": "Route origin anchor not found", "screenshot": "00015_SAFE_STOP.png"}

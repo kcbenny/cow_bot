@@ -1,0 +1,4 @@
+{"event": 1, "at": 1795104110.8693552, "state": "INVENTORY_REOPENED", "cowhide": 28, "bones": 0, "empty": 0, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1795104111.0463479, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1795104111.3954656, "state": "WALK_TO_BANK", "screenshot": "00003_WALK_TO_BANK.png"}
+{"event": 4, "at": 1795104111.6466293, "state": "SAFE_STOP", "reason": "Route origin anchor not found", "screenshot": "00004_SAFE_STOP.png"}

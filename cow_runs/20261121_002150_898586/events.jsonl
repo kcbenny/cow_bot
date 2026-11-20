@@ -1,0 +1,5 @@
+{"event": 1, "at": 1795191716.8691022, "state": "INVENTORY_REOPENED", "cowhide": 28, "bones": 0, "empty": 0, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1795191717.0475488, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1795191717.3798866, "state": "WALK_TO_BANK", "screenshot": "00003_WALK_TO_BANK.png"}
+{"event": 4, "at": 1795191718.271291, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 0, "point": [713, 671], "screenshot": "00004_ROUTE_SCENE_REALIGNED.png"}
+{"event": 5, "at": 1795191718.4140468, "state": "SAFE_STOP", "reason": "Route action rejected: Walk here", "screenshot": "00005_SAFE_STOP.png"}

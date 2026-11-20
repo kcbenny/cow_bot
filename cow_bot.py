@@ -1,5 +1,8 @@
 import argparse
 import json
+import math
+import shutil
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -10,8 +13,11 @@ import numpy as np
 from cow_core import HealthLock, Mode, SafetyError
 from cow_vision import (
     CENTERS, PROFILE, ROOT, ROUTE_ANCHOR_SEARCH, ROUTE_CLICK_AREA, Vision, bootstrap,
-    crop, learn_line, load_image, save_image, similar, text_mask,
+    crop, decode_hover_line, learn_line, load_image, save_image, similar, text_mask,
 )
+
+ROUTE_START_VERIFY_TIMEOUT_SECONDS = 8
+ROUTE_ARRIVAL_VERIFY_TIMEOUT_SECONDS = 8
 
 
 def select_rect(
@@ -109,6 +115,21 @@ def route_step_count(direction: str) -> int:
         if 1 <= count <= 40:
             return count
         print("步數必須是 1 到 40 的整數，請重新輸入。")
+
+
+def route_recalibration_target_area(
+    direction: str, step_number: int, image_shape: tuple[int, ...],
+) -> tuple[int, int, int, int]:
+    if direction == "to_bank" and step_number == 4:
+        area = (820, 740, 370, 180)
+        if area[0] + area[2] > image_shape[1] or area[1] + area[3] > image_shape[0] - 160:
+            raise SafetyError("The calibrated step-4 destination area is outside the safe screen")
+        return area
+    left, top, width, height = ROUTE_CLICK_AREA
+    bottom = min(top + height, image_shape[0] - 160)
+    if bottom <= top:
+        raise SafetyError("No safe route destination area is available")
+    return left, top, width, bottom - top
 
 
 def route_progress_path(path: Path) -> Path:
@@ -307,6 +328,11 @@ def learn_route_hover_action(
     action = label.split("/", 1)[0].strip()
     if action not in allowed or action in ("Climb-up Staircase", "Climb-down Staircase"):
         raise ValueError("Unsupported hover action")
+    observed = decode_hover_line(alphabet, image)
+    if observed and observed != action:
+        raise ValueError(
+            f"Screenshot hover is {observed!r}, not the entered action {action!r}",
+        )
     try:
         learn_line(alphabet, image, action, prefix_only=True)
     except SafetyError as error:
@@ -526,6 +552,8 @@ def record_route(path: Path) -> None:
                 "hover": action,
                 "origin": str(origin_path.relative_to(path.parent)),
                 "arrival": str(arrival_path.relative_to(path.parent)),
+                "reference": str(before_path.relative_to(path.parent)),
+                "arrival_screenshot": str(after_path.relative_to(path.parent)),
                 "arrival_roi": arrival_roi,
                 "offset": [point[0] - origin_roi[0], point[1] - origin_roi[1]],
                 "search": anchor_search,
@@ -547,6 +575,239 @@ def record_route(path: Path) -> None:
     temporary_route.replace(path)
     progress_file.unlink()
     print(f"\n校準完成，路線已保存：{path}")
+
+
+def verify_route_step_start(
+    path: Path, data: dict, direction: str, step_number: int, desktop,
+) -> None:
+    from cow_desktop import locate, registered_route_arrival, route_screenshot_path
+
+    steps = data[direction]
+    step = steps[step_number - 1]
+    if step_number > 1:
+        previous = steps[step_number - 2]
+        reference_path = route_screenshot_path(path, previous, "arrival")
+        if reference_path is None:
+            raise SafetyError(
+                "Cannot verify the start: previous step has no saved arrival screenshot",
+            )
+        reference = load_image(reference_path)
+        arrival = load_image(path.parent / previous["arrival"])
+    else:
+        origin = load_image(path.parent / step["origin"])
+
+    deadline = time.monotonic() + ROUTE_START_VERIFY_TIMEOUT_SECONDS
+    confirmations = 0
+    anchor = None
+    while time.monotonic() < deadline:
+        image = desktop.snapshot()
+        if step_number > 1:
+            matches = similar(crop(image, previous["arrival_roi"]), arrival, 6)
+            if not matches:
+                matches = registered_route_arrival(
+                    reference, image, previous["arrival_roi"], previous["search"],
+                )
+        else:
+            try:
+                current_anchor = locate(image, origin, step["search"])
+            except SafetyError:
+                current_anchor = None
+            matches = current_anchor is not None and (
+                anchor is None or math.dist(anchor, current_anchor) <= 2
+            )
+            anchor = current_anchor if matches else None
+        confirmations = confirmations + 1 if matches else 0
+        if confirmations >= 3:
+            print(
+                f"\n*** ALERT: 已確認在 {direction} 第 {step_number} 步的正確起點。"
+                "現在開始重新校準。 ***\n",
+                flush=True,
+            )
+            return
+        time.sleep(0.15)
+    raise SafetyError(
+        f"Start position for {direction} step {step_number} could not be verified; "
+        "route was not changed",
+    )
+
+
+def verify_route_step_arrival(
+    direction: str, step_number: int, reference: np.ndarray,
+    roi: list[int], arrival: np.ndarray, search: list[int], desktop,
+) -> None:
+    from cow_desktop import registered_route_arrival
+
+    deadline = time.monotonic() + ROUTE_ARRIVAL_VERIFY_TIMEOUT_SECONDS
+    confirmations = 0
+    while time.monotonic() < deadline:
+        image = desktop.snapshot()
+        matches = similar(crop(image, roi), arrival, 6)
+        if not matches:
+            matches = registered_route_arrival(reference, image, roi, search)
+        confirmations = confirmations + 1 if matches else 0
+        if confirmations >= 3:
+            print(
+                f"\n*** ALERT: 已確認 {direction} 第 {step_number} 步的抵達地標，"
+                "連續 3 次畫面符合。這是地標/場景確認，不代表角色位於原畫面的綠色點選框。 ***\n",
+                flush=True,
+            )
+            return
+        time.sleep(0.15)
+    raise SafetyError(
+        f"Arrival landmark for {direction} step {step_number} could not be verified; "
+        "route was not changed",
+    )
+
+
+def recalibrate_route_step(path: Path, direction: str, step_number: int) -> None:
+    from cow_desktop import Desktop, Route
+
+    path = path.resolve()
+    vision = Vision()
+    Route(path, vision)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    steps = data[direction]
+    if not 1 <= step_number <= len(steps):
+        raise SafetyError(
+            f"Step must be in 1..{len(steps)} for {direction}",
+        )
+    index = step_number - 1
+    old_step = steps[index]
+    desktop = Desktop(vision)
+    print(
+        f"只重校 {direction} 第 {step_number} 步；其他路線步驟不會改動。"
+        "請先手動把人物帶到這一步的起點並等畫面穩定。"
+    )
+    input("準備好後按 Enter；倒數 5 秒後切回遊戲，開始驗證及拍攝起點：")
+    countdown(
+        "5 秒後開始驗證起點並拍攝。請切回最大化 OSRS 並保持畫面穩定；"
+        "程式不會操作遊戲。"
+    )
+    verify_route_step_start(path, data, direction, step_number, desktop)
+    before = desktop.snapshot()
+    screen_width, screen_height = vision.settings["screen"]
+    if screen_width != before.shape[1] or screen_height != before.shape[0]:
+        raise SafetyError("Captured screen does not match the calibrated route")
+
+    asset_dir = path.parent / f"{path.stem}_assets"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    stem = f"{direction}_{index:02d}_recal_{timestamp}"
+    revision_dir = asset_dir / stem
+    temporary_dir = Path(tempfile.mkdtemp(prefix=".recalibrating_", dir=asset_dir))
+    temporary_route = path.with_name(f".{path.stem}_{timestamp}.tmp.json")
+    committed = False
+    try:
+        before_path = temporary_dir / f"{stem}_before_screenshot.png"
+        save_image(before_path, before)
+        print(
+            "起點截圖預覽：框選完整、固定、清楚的地標；"
+            "不要選人物、牛、玩家、游標或畫面邊緣。"
+        )
+        origin_roi = select_rect(
+            before, "重校起點：框選固定地標；ENTER/SPACE 確認",
+        )
+        origin = crop(before, origin_roi)
+        if float(origin.std()) < 12:
+            raise SafetyError("Origin landmark has insufficient visual detail")
+
+        if direction == "to_bank" and step_number == 4:
+            print(
+                "在同一張預覽圖選出剛才游標停留的位置；"
+                "只選綠框內可走地面，避開樹木及底部介面，並確認 hover 是 Walk here。"
+            )
+        else:
+            print(
+                "在同一張預覽圖選出剛才遊戲中游標停留的位置；"
+                "避開介面，並確認 hover 是正確動作。"
+            )
+        target_area = route_recalibration_target_area(
+            direction, step_number, before.shape,
+        )
+        point = select_point(before, target_area)
+        if not point_inside_rect(point, target_area):
+            raise SafetyError("Route destination is outside the safe selection area")
+
+        alphabet = json.loads((PROFILE / "font.json").read_text(encoding="utf-8"))
+        menu_temp_path = temporary_dir / f"{stem}_menu_action.png"
+        action, menu_action = route_action(
+            alphabet, before, before_path, menu_temp_path,
+        )
+        input(
+            f"請手動完成「{action}」，等人物到達並停定後按 Enter 拍抵達畫面；"
+            "程式不會操作遊戲："
+        )
+        after = countdown_snapshot(
+            desktop,
+            "5 秒後截取抵達畫面。保持最大化 OSRS 前景及畫面穩定；程式不會操作遊戲。",
+        )
+        after_path = temporary_dir / f"{stem}_arrival_screenshot.png"
+        save_image(after_path, after)
+        print("抵達截圖預覽：框選一小塊固定地景；不要選人物、牛或游標。")
+        arrival_roi = select_rect(
+            after, "重校抵達：框選固定地標；ENTER/SPACE 確認",
+        )
+        arrival = crop(after, arrival_roi)
+        if float(arrival.std()) < 12 or similar(crop(before, arrival_roi), arrival, 12):
+            raise SafetyError("Arrival signature is blank or already present before moving")
+        countdown(
+            "5 秒後開始驗證抵達地標。請切回最大化 OSRS 並保持畫面穩定；"
+            "程式不會操作遊戲。"
+        )
+        verify_route_step_arrival(
+            direction, step_number, after, arrival_roi, arrival,
+            list(ROUTE_ANCHOR_SEARCH), desktop,
+        )
+        timeout = arrival_timeout(action)
+
+        final_before = revision_dir / before_path.name
+        final_after = revision_dir / after_path.name
+        final_origin = revision_dir / f"{stem}_origin.png"
+        final_arrival = revision_dir / f"{stem}_arrival.png"
+        final_menu = revision_dir / f"{stem}_menu_action.png"
+        save_route_landmarks(
+            temporary_dir / final_origin.name,
+            origin,
+            temporary_dir / final_arrival.name,
+            arrival,
+        )
+        if menu_action is not None:
+            shutil.copyfile(menu_temp_path, temporary_dir / final_menu.name)
+
+        updated_step = dict(old_step)
+        updated_step.update({
+            "hover": action,
+            "origin": str(final_origin.relative_to(path.parent)),
+            "arrival": str(final_arrival.relative_to(path.parent)),
+            "reference": str(final_before.relative_to(path.parent)),
+            "arrival_screenshot": str(final_after.relative_to(path.parent)),
+            "arrival_roi": arrival_roi,
+            "offset": [point[0] - origin_roi[0], point[1] - origin_roi[1]],
+            "search": list(ROUTE_ANCHOR_SEARCH),
+            "timeout": timeout,
+        })
+        if menu_action is None:
+            updated_step.pop("menu_action", None)
+        else:
+            updated_step["menu_action"] = str(final_menu.relative_to(path.parent))
+        steps[index] = updated_step
+
+        temporary_dir.replace(revision_dir)
+        temporary_route.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        Route(temporary_route, vision)
+        (PROFILE / "font.json").write_text(json.dumps(alphabet), encoding="utf-8")
+        temporary_route.replace(path)
+        committed = True
+        print(
+            f"已只更新 {direction} 第 {step_number} 步，其餘路線步驟保持不變：{path}",
+        )
+    finally:
+        if temporary_route.exists():
+            temporary_route.unlink()
+        if temporary_dir.exists():
+            shutil.rmtree(temporary_dir)
+        if not committed and revision_dir.exists():
+            shutil.rmtree(revision_dir)
 
 
 def calibrate_item(path: Path, slot: int) -> None:
@@ -653,6 +914,12 @@ def main() -> None:
     bones.add_argument("--slot", type=int, required=True)
     route = sub.add_parser("record-route", help="Manually calibrate both directions; no game inputs")
     route.add_argument("--output", type=Path, default=PROFILE / "route.json")
+    recalibrate = sub.add_parser(
+        "recalibrate-route", help="Re-record one existing route step; no game inputs",
+    )
+    recalibrate.add_argument("--route", type=Path, required=True)
+    recalibrate.add_argument("--direction", choices=("to_bank", "to_cows"), required=True)
+    recalibrate.add_argument("--step", type=int, required=True, help="1-based step number")
     observe = sub.add_parser("observe", help="Read game frames, never move or click")
     observe.add_argument("--seconds", type=int, default=30)
     run = sub.add_parser("run", help="Requires --live; looting needs a route unless --no-bank")
@@ -683,6 +950,8 @@ def main() -> None:
         except KeyboardInterrupt as error:
             report_route_resume(output, error)
             raise
+    elif args.command == "recalibrate-route":
+        recalibrate_route_step(args.route, args.direction, args.step)
     elif args.command in ("run", "observe"):
         from cow_desktop import Audit, Bot, Desktop, Route
         if args.command == "run":

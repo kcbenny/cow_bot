@@ -1,0 +1,6 @@
+{"event": 1, "at": 1795107749.807505, "state": "INVENTORY_REOPENED", "cowhide": 28, "bones": 0, "empty": 0, "screenshot": "00001_INVENTORY_REOPENED.png"}
+{"event": 2, "at": 1795107749.9868057, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00002_READY.png"}
+{"event": 3, "at": 1795107750.3192625, "state": "WALK_TO_BANK", "screenshot": "00003_WALK_TO_BANK.png"}
+{"event": 4, "at": 1795107750.846486, "state": "ROUTE_SCENE_REALIGNED", "direction": "to_bank", "step": 0, "point": [689, 761], "screenshot": "00004_ROUTE_SCENE_REALIGNED.png"}
+{"event": 5, "at": 1795107751.1039102, "state": "ROUTE_CLICK", "direction": "to_bank", "step": 0, "action": "Walk here", "screenshot": "00005_ROUTE_CLICK.png"}
+{"event": 6, "at": 1795107766.201895, "state": "SAFE_STOP", "reason": "Capture failed: Foreground-window check failed: unexpected foreground title=''", "screenshot": "00006_SAFE_STOP.png"}

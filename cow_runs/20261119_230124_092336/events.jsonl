@@ -1,0 +1,22 @@
+{"event": 1, "at": 1795100489.5384247, "state": "READY", "mode": "COWHIDE_ONLY", "screenshot": "00001_READY.png"}
+{"event": 2, "at": 1795100493.407061, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [1012, 482], "screenshot": "00002_ATTACK_CLICK.png"}
+{"event": 3, "at": 1795100495.668355, "state": "PLAYER_STOPPED", "stable_frames": 7, "screenshot": "00003_PLAYER_STOPPED.png"}
+{"event": 4, "at": 1795100511.6845298, "state": "KILL_VERIFIED", "kills": 1, "screenshot": "00004_KILL_VERIFIED.png"}
+{"event": 5, "at": 1795100517.1595187, "state": "PICKUP_CLICK", "item": "Cowhide", "screenshot": "00005_PICKUP_CLICK.png"}
+{"event": 6, "at": 1795100518.266614, "state": "PICKUP_VERIFIED", "item": "Cowhide", "pickups": 1, "screenshot": "00006_PICKUP_VERIFIED.png"}
+{"event": 7, "at": 1795100518.3819659, "state": "LOOT_SEARCH_FINISHED", "center": [1012, 482], "scanned_points": 3, "fine_points": 2, "coarse_points": 1, "color_candidates": 1, "color_candidate_points": [[973, 530]], "hover_matches": 1, "ignored_item_matches": 0, "farthest_distance": 73.4, "elapsed_seconds": 6.43, "stop_reason": "target_collected", "screenshot": "00007_LOOT_SEARCH_FINISHED.png"}
+{"event": 8, "at": 1795100530.9777026, "state": "TARGET_BLACKLISTED", "point": [868, 386], "duration_seconds": 20, "reason": "target_in_combat", "screenshot": "00008_TARGET_BLACKLISTED.png"}
+{"event": 9, "at": 1795100532.029876, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [940, 362], "screenshot": "00009_ATTACK_CLICK.png"}
+{"event": 10, "at": 1795100534.396794, "state": "TARGET_BLACKLISTED", "point": [940, 362], "duration_seconds": 20, "message": "Someone else is fighting that", "screenshot": "00010_TARGET_BLACKLISTED.png"}
+{"event": 11, "at": 1795100534.5756729, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 1, "screenshot": "00011_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 12, "at": 1795100535.7609801, "state": "TARGET_BLACKLISTED", "point": [940, 482], "duration_seconds": 20, "reason": "target_in_combat", "screenshot": "00012_TARGET_BLACKLISTED.png"}
+{"event": 13, "at": 1795100565.1591103, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 2, "screenshot": "00013_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 14, "at": 1795100595.772276, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 3, "screenshot": "00014_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 15, "at": 1795100599.7246091, "state": "ATTACK_CLICK", "action": "Attack Cow calf (level-2)", "point": [892, 458], "screenshot": "00015_ATTACK_CLICK.png"}
+{"event": 16, "at": 1795100600.6454642, "state": "TARGET_BLACKLISTED", "point": [892, 458], "duration_seconds": 20, "message": "Someone else is fighting that", "screenshot": "00016_TARGET_BLACKLISTED.png"}
+{"event": 17, "at": 1795100600.8065245, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 4, "screenshot": "00017_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 18, "at": 1795100621.506334, "state": "TARGET_BLACKLISTED", "point": [772, 410], "duration_seconds": 20, "reason": "target_in_combat", "screenshot": "00018_TARGET_BLACKLISTED.png"}
+{"event": 19, "at": 1795100624.5171118, "state": "ATTACK_CLICK", "action": "Attack Cow (level-2)", "point": [868, 722], "screenshot": "00019_ATTACK_CLICK.png"}
+{"event": 20, "at": 1795100625.0108502, "state": "TARGET_BLACKLISTED", "point": [868, 722], "duration_seconds": 20, "message": "Someone else is fighting that", "screenshot": "00020_TARGET_BLACKLISTED.png"}
+{"event": 21, "at": 1795100625.1897566, "state": "SEARCH_OR_ATTACK_FAILED", "failures": 5, "screenshot": "00021_SEARCH_OR_ATTACK_FAILED.png"}
+{"event": 22, "at": 1795100625.3186758, "state": "SAFE_STOP", "reason": "Five consecutive search/attack failures", "screenshot": "00022_SAFE_STOP.png"}
